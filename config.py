@@ -14,10 +14,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 model_name = 'resnet50'
 image_embedding = 2048
-text_encoder_model = "distilbert-base-uncased"
-text_embedding = 768
-text_tokenizer = "distilbert-base-uncased"
-max_length = 200
+location_embedding = 3
+# text_encoder_model = "distilbert-base-uncased"
+# text_embedding = 768
+# text_tokenizer = "distilbert-base-uncased"
+# max_length = 200
 
 pretrained = False # for both image encoder and text encoder
 trainable = False # for both image encoder and text encoder
