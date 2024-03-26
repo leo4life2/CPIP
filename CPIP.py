@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import config as CFG
 from modules import ImageEncoder, ProjectionHead
 
-class CLIPModel(nn.Module):
+class CPIPModel(nn.Module):
     def __init__(
         self,
         temperature=CFG.temperature,
@@ -22,10 +22,17 @@ class CLIPModel(nn.Module):
         # Getting Image Features
         image_features = self.image_encoder(batch["image"])
         location_features = batch["location"]
+        
+        # print("image_faeture: ", image_features)
+        # print("location feature: ", location_features)
+        
         # Getting Image and Location Embeddings (with same dimension)
         image_embeddings = self.image_projection(image_features)
         location_embeddings = self.location_projection(location_features)
-
+        
+        # print("image emb: ", image_embeddings)
+        # print("location emb: ", location_embeddings)
+        
         # Normalize embeddings
         image_embeddings = F.normalize(image_embeddings, p=2, dim=-1)
         location_embeddings = F.normalize(location_embeddings, p=2, dim=-1)
@@ -34,21 +41,10 @@ class CLIPModel(nn.Module):
         logits = image_embeddings @ location_embeddings.T / self.temperature
         labels = torch.arange(logits.size(0)).long().to(logits.device)
         
+        # TODO: experiment with one way loss
         img_to_text_loss = F.cross_entropy(logits, labels)
         text_to_img_loss = F.cross_entropy(logits.T, labels)
 
         loss = (img_to_text_loss + text_to_img_loss) / 2
 
-        return loss
-
-if __name__ == '__main__':
-    images = torch.randn(8, 3, 224, 224)
-    locations = torch.randn(8, 3) # locations are 3d vectors
-    batch = {
-        'image': images,
-        'location': locations,
-    }
-
-    CLIP = CLIPModel()
-    loss = CLIP(batch)
-    print(loss)
+        return loss, logits
