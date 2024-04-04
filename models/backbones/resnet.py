@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torchvision
 import numpy as np
+import config as CFG
+import pdb
 
 class ResNet(nn.Module):
     def __init__(self,
@@ -86,7 +88,10 @@ class ResNet(nn.Module):
         self.out_channels = out_channels // 2 if self.model.layer4 is None else out_channels
         self.out_channels = self.out_channels // 2 if self.model.layer3 is None else self.out_channels
 
+        self.model.to(CFG.device)
+
     def forward(self, x):
+        # x: torch.Size([8, 3, 810, 1440])
         x = self.model.conv1(x)
         x = self.model.bn1(x)
         x = self.model.relu(x)

@@ -10,8 +10,9 @@ from CPIP import CPIPModel
 from dataset import CPIPDataset, get_transforms
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
-from utils import AvgMeter, get_lr
+from utils_file import AvgMeter, get_lr
 
+import pdb
 
 def prepare_data(data_path, test_size=0.2, random_state=42):
     # List all .png files in the directory
@@ -27,7 +28,7 @@ def prepare_data(data_path, test_size=0.2, random_state=42):
             json_data = json.load(f)
 
         location = json_data["locations"][0]
-        yaw = int(re.search("yaw(\d+)", image_file).group(1))
+        yaw = int(re.search(r"yaw(\d+)", image_file).group(1))
         location.append(yaw)
 
         data.append({"image": image_file, "location": location})
@@ -56,15 +57,16 @@ def build_loaders(dataframe, mode):
 
 
 def train_epoch(model, train_loader, optimizer, lr_scheduler, step):
-    model.train()
     loss_meter = AvgMeter()
     accuracy_meter = AvgMeter()
     tqdm_object = tqdm(train_loader, total=len(train_loader))
 
+    # image input size: torch.Size([3, 518, 518])
+
     for batch in tqdm_object:
         batch = {k: v.to(CFG.device) for k, v in batch.items() if k != "caption"}
         optimizer.zero_grad()
-        loss, logits = model(batch)
+        loss, logits = model(batch)# seg fault here
         labels = torch.arange(logits.size(0)).long().to(logits.device)
         accuracy = calculate_accuracy(logits, labels)
 
@@ -136,6 +138,7 @@ def main():
         for epoch in range(CFG.epochs):
             print(f"Epoch: {epoch + 1}")
             model.train()
+            # seg fault here
             train_loss, train_accuracy = train_epoch(model, train_loader, optimizer, lr_scheduler, step)
             model.eval()
             with torch.no_grad():
