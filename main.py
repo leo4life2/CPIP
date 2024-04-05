@@ -124,32 +124,49 @@ def main():
     valid_loader = build_loaders(valid_df, mode="valid")
 
     model = CPIPModel().to(CFG.device)
+    
+    # Check if best.pt exists and load it
+    best_model_path = "best.pt"
+    if os.path.exists(best_model_path) and CFG.resume_training:
+        model.load_state_dict(torch.load(best_model_path))
+        print("Loaded model weights from best.pt and resuming training...")
+    
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=CFG.lr, weight_decay=CFG.weight_decay
     )
     lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", patience=CFG.patience, factor=CFG.factor
+        optimizer, mode="max", patience=CFG.patience, factor=CFG.factor
     )
     step = "epoch"
 
     best_loss = float("inf")
-    
-    # Open a file to write the losses
+    warmup_epochs = 5  # Number of epochs for the warm-up
+    initial_lr = CFG.lr  # Target learning rate after warm-up
+
     with open('metrics.csv', mode='w', newline='') as file:
         writer = csv.writer(file)
-        # Write the header to include accuracy
         writer.writerow(["Epoch", "Training Loss", "Validation Loss", "Training Accuracy", "Validation Accuracy"])
         
         for epoch in range(CFG.epochs):
             print(f"Epoch: {epoch + 1}")
+
+            # Warm-up: Linearly increase learning rate
+            if epoch < warmup_epochs:
+                lr = initial_lr * (epoch + 1) / warmup_epochs
+                for param_group in optimizer.param_groups:
+                    param_group['lr'] = lr
+
             model.train()
-            # seg fault here
             train_loss, train_accuracy = train_epoch(model, train_loader, optimizer, lr_scheduler, step)
+            
             model.eval()
             with torch.no_grad():
                 valid_loss, valid_accuracy = valid_epoch(model, valid_loader)
 
-            # Write the current epoch's losses and accuracies
+            # Update learning rate with ReduceLROnPlateau after warm-up phase
+            if epoch >= warmup_epochs:
+                lr_scheduler.step(valid_accuracy)
+
             writer.writerow([epoch + 1, train_loss, valid_loss, train_accuracy, valid_accuracy])
 
             if valid_loss < best_loss:
