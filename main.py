@@ -11,8 +11,13 @@ from dataset import CPIPDataset, get_transforms
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from utils_file import AvgMeter, get_lr
-
 import pdb
+import ssl
+
+ssl._create_default_https_context = ssl._create_unverified_context # workaround for no local CA trust store issue
+
+USER = os.environ.get("USER")
+os.environ['TORCH_HOME'] = f'/scratch/{USER}/pytorch'
 
 def prepare_data(data_path, test_size=0.2, random_state=42):
     # List all .png files in the directory
