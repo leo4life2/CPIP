@@ -11,14 +11,15 @@ import pdb
 class CPIPModel(nn.Module):
     def __init__(
         self,
-        temperature=CFG.temperature,
-        image_embedding=CFG.image_embedding,
-        location_embedding=CFG.location_embedding,
+        temperature,
+        image_embedding,
+        location_embedding,
+        args
     ):
         super().__init__()
-        self.image_encoder = ImageEncoder()
-        self.image_projection = ProjectionHead(embedding_dim=image_embedding)
-        self.location_projection = ProjectionHead(embedding_dim=location_embedding)
+        self.image_encoder = ImageEncoder(args.model_name,args.pretrained, args.trainable, args.freeze_image_encoder, args)
+        self.image_projection = ProjectionHead(embedding_dim=image_embedding, projection_dim=args.projection_dim, dropout=args.dropout)
+        self.location_projection = ProjectionHead(embedding_dim=location_embedding, projection_dim=args.projection_dim, dropout=args.dropout)
         self.temperature = temperature
 
     def forward(self, batch):
@@ -34,6 +35,8 @@ class CPIPModel(nn.Module):
         # Getting Image and Location Embeddings (with same dimension)
         image_embeddings = self.image_projection(image_features)
         location_embeddings = self.location_projection(location_features)
+        #-----------------------------
+        #location_embeddings = encode_text(location_input)
 
         # print("image emb: ", image_embeddings)
         # print("location emb: ", location_embeddings)
