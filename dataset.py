@@ -10,7 +10,7 @@ import config as CFG
 import pdb
 
 class Dataset_for_query(torch.utils.data.Dataset):
-    def __init__(self, df, image_path, transforms=None, args=None):
+    def __init__(self, df, image_path, transforms=None):
         """
         Args:
             df (pd.DataFrame): DataFrame containing the image filenames and locations.
@@ -18,7 +18,6 @@ class Dataset_for_query(torch.utils.data.Dataset):
         """
         self.df = df
         self.transforms = transforms
-        self.args = args,
         self.image_path = image_path
 
     def __getitem__(self, idx):
@@ -85,18 +84,18 @@ class CPIPDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.df)
 
-def get_transforms(mode="train", args=None):
+def get_transforms(mode="train"):
     if mode == "train":
         return A.Compose(
             [
-                A.Resize(args.img_height, args.img_width, always_apply=True),
+                A.Resize(CFG.img_height, CFG.img_width, always_apply=True),
                 A.Normalize(max_pixel_value=255.0, always_apply=True),
             ]
         )
     else:
         return A.Compose(
             [
-                A.Resize(args.img_height, args.img_width, always_apply=True),
+                A.Resize(CFG.img_height, CFG.img_width, always_apply=True),
                 A.Normalize(max_pixel_value=255.0, always_apply=True),
             ]
         )

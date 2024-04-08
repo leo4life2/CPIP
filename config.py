@@ -4,7 +4,8 @@ import torch
 # Basic Configuration
 # ==========================
 debug = True
-data_path = "/scratch/zl3493/UNav-Dataset/810p/raw/000"
+#data_path = "/scratch/zl3493/UNav-Dataset/810p/raw/000"
+data_path = "/scratch/jh7956/Datasets/000" # Junjie's datapath
 
 # ==========================
 # Training Setup
@@ -14,6 +15,8 @@ num_workers = 0
 epochs = 70
 warmup_epochs = 5
 resume_training = True
+do_train = False # Set to False if already have a trained model
+process_data = True # Set to False if already have stored vector
 
 # ==========================
 # Model Parameters
@@ -63,3 +66,9 @@ factor = 0.2
 # Hardware Configuration
 # ==========================
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+# ==========================
+# VPR Configuration
+# ==========================
+vpr_threshold = 0.5
