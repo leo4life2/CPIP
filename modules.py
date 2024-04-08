@@ -13,12 +13,11 @@ class MixVPRModel(nn.Module):
         pretrained=True,
         layers_to_freeze=1,
         layers_to_crop=[],
-        agg_arch="ConvAP",
+        agg_arch="MixVPR",
         agg_config={},
         loss_name="MultiSimilarityLoss",
         miner_name="MultiSimilarityMiner",
-        miner_margin=0.1,
-        faiss_gpu=False,
+        miner_margin=0.1
     ):
         super().__init__()
         self.encoder_arch = backbone_arch
@@ -32,7 +31,6 @@ class MixVPRModel(nn.Module):
         self.loss_name = loss_name
         self.miner_name = miner_name
         self.miner_margin = miner_margin
-        self.faiss_gpu = faiss_gpu
 
         self.loss_fn = utils.get_loss(loss_name)
         self.miner = utils.get_miner(miner_name, miner_margin)
@@ -88,8 +86,7 @@ class ImageEncoder(nn.Module):
                 # FastAPLoss, CircleLoss, SupConLoss,
                 loss_name="MultiSimilarityLoss",
                 miner_name="MultiSimilarityMiner",  # example: TripletMarginMiner, MultiSimilarityMiner, PairMarginMiner
-                miner_margin=0.1,
-                faiss_gpu=False,
+                miner_margin=0.1
             )
         else:
             self.model = timm.create_model(

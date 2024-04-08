@@ -9,31 +9,21 @@ import pdb
 
 
 class CPIPModel(nn.Module):
-    def __init__(
-        self,
-        temperature=CFG.temperature,
-        image_embedding=CFG.image_embedding,
-        location_embedding=CFG.location_embedding,
-        projection_dim=CFG.contrastive_dimension,
-        image_projection_blocks=CFG.image_projection_blocks,
-        location_projection_blocks=CFG.location_projection_blocks,
-        projection_dropout=CFG.projection_dropout,
-    ):
+    def __init__(self):
         super().__init__()
         self.image_encoder = ImageEncoder()
         self.image_projection = ProjectionHead(
-            embedding_dim=image_embedding,
-            projection_dim=projection_dim,
-            dropout=projection_dropout,
-            num_blocks=image_projection_blocks,
+            embedding_dim=CFG.image_embedding,
+            projection_dim=CFG.contrastive_dimension,
+            dropout=CFG.projection_dropout,
+            num_blocks=CFG.image_projection_blocks,
         )
         self.location_projection = ProjectionHead(
-            embedding_dim=location_embedding,
-            projection_dim=projection_dim,
-            dropout=projection_dropout,
-            num_blocks=image_projection_blocks,
+            embedding_dim=CFG.location_embedding,
+            projection_dim=CFG.contrastive_dimension,
+            dropout=CFG.projection_dropout,
+            num_blocks=CFG.location_projection_blocks,
         )
-        self.temperature = temperature
 
     def forward(self, batch):
         # Getting Image Features
@@ -51,7 +41,7 @@ class CPIPModel(nn.Module):
         location_embeddings = F.normalize(location_embeddings, p=2, dim=-1)
 
         # Calculating the Loss
-        logits = image_embeddings @ location_embeddings.T / self.temperature
+        logits = image_embeddings @ location_embeddings.T / CFG.temperature
         labels = torch.arange(logits.size(0)).long().to(logits.device)
 
         img_to_text_loss = F.cross_entropy(logits, labels)
