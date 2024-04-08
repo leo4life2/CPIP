@@ -3,7 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 
 import config as CFG
-from modules import ImageEncoder, ProjectionHead, MixVPRModel
+from modules import ImageEncoder, ProjectionHead
 
 import pdb
 
@@ -14,11 +14,25 @@ class CPIPModel(nn.Module):
         temperature=CFG.temperature,
         image_embedding=CFG.image_embedding,
         location_embedding=CFG.location_embedding,
+        projection_dim=CFG.contrastive_dimension,
+        image_projection_blocks=CFG.image_projection_blocks,
+        location_projection_blocks=CFG.location_projection_blocks,
+        projection_dropout=CFG.projection_dropout,
     ):
         super().__init__()
         self.image_encoder = ImageEncoder()
-        self.image_projection = ProjectionHead(embedding_dim=image_embedding)
-        self.location_projection = ProjectionHead(embedding_dim=location_embedding)
+        self.image_projection = ProjectionHead(
+            embedding_dim=image_embedding,
+            projection_dim=projection_dim,
+            dropout=projection_dropout,
+            num_blocks=image_projection_blocks,
+        )
+        self.location_projection = ProjectionHead(
+            embedding_dim=location_embedding,
+            projection_dim=projection_dim,
+            dropout=projection_dropout,
+            num_blocks=image_projection_blocks,
+        )
         self.temperature = temperature
 
     def forward(self, batch):
@@ -28,27 +42,18 @@ class CPIPModel(nn.Module):
         image_features = self.image_encoder(batch["image"])
         location_features = batch["location"]
 
-        # print("image_faeture: ", image_features)
-        # print("location feature: ", location_features)
-        
         # Getting Image and Location Embeddings (with same dimension)
         image_embeddings = self.image_projection(image_features)
         location_embeddings = self.location_projection(location_features)
 
-        # print("image emb: ", image_embeddings)
-        # print("location emb: ", location_embeddings)
-        
         # Normalize embeddings
         image_embeddings = F.normalize(image_embeddings, p=2, dim=-1)
         location_embeddings = F.normalize(location_embeddings, p=2, dim=-1)
 
-        
         # Calculating the Loss
         logits = image_embeddings @ location_embeddings.T / self.temperature
         labels = torch.arange(logits.size(0)).long().to(logits.device)
 
-        
-        # TODO: experiment with one way loss
         img_to_text_loss = F.cross_entropy(logits, labels)
         text_to_img_loss = F.cross_entropy(logits.T, labels)
 

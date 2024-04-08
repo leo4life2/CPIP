@@ -11,7 +11,7 @@ data_path = "/scratch/zl3493/UNav-Dataset/810p/raw/000"
 # ==========================
 batch_size = 10
 num_workers = 0
-epochs = 30
+epochs = 70
 warmup_epochs = 5
 resume_training = True
 
@@ -21,8 +21,12 @@ resume_training = True
 model_name = 'MixVPR'
 # Image Embedding Configuration
 # image_embedding = 1024 # for vit_large_patch14_dinov2
-image_embedding = 4096 # Current setting
+image_embedding = 4096 # for MixVPR
 location_embedding = 3
+contrastive_dimension = 256 # The embedding dimension that contrastive learning is done in
+image_projection_blocks = 1
+location_projection_blocks = 2
+projection_dropout = 0.1
 
 # Pretrained & Trainability Settings
 pretrained = True
