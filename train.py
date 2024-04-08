@@ -144,7 +144,7 @@ def valid_epoch(model, valid_loader, writer, epoch):
 
     return loss_meter.avg, accuracy_meter.avg
 
-def main():
+def train():
     writer = SummaryWriter()  # TensorBoard writer
 
     # Log hyperparameters
@@ -191,4 +191,4 @@ def main():
     writer.close()
 
 if __name__ == "__main__":
-    main()
+    train()

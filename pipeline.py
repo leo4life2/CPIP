@@ -1,28 +1,24 @@
+import argparse
+import csv
+import glob
+import json
+import os
+import pdb
+import pickle
+import re
+
+import cv2
+import numpy as np
+import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
-import numpy as np
-
-import cv2
-
-import argparse
-import pickle
-from tqdm import tqdm
-import json
-import os
-import csv
-import re
-import glob
-import pdb
-
-import pandas as pd
-import torch
-from CPIP import CPIPModel
-from dataset import CPIPDataset, get_transforms, Dataset_for_query
+from dataset import CPIPDataset, Dataset_for_query, get_transforms
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from utils_file import AvgMeter, get_lr
+
+from CPIP import CPIPModel
 
 
 def parsing_argument():
