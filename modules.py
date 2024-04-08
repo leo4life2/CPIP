@@ -8,17 +8,18 @@ from typing import Union, Tuple
 
 
 class MixVPRModel(nn.Module):
-    def __init__(self,
-                 backbone_arch='resnet50',
-                 pretrained=True,
-                 layers_to_freeze=1,
-                 layers_to_crop=[],
-                 agg_arch='ConvAP',
-                 agg_config={},
-                 loss_name='MultiSimilarityLoss',
-                 miner_name='MultiSimilarityMiner',
-                 miner_margin=0.1
-                 ):
+    def __init__(
+        self,
+        backbone_arch="resnet50",
+        pretrained=True,
+        layers_to_freeze=1,
+        layers_to_crop=[],
+        agg_arch="MixVPR",
+        agg_config={},
+        loss_name="MultiSimilarityLoss",
+        miner_name="MultiSimilarityMiner",
+        miner_margin=0.1
+    ):
         super().__init__()
         self.encoder_arch = backbone_arch
         self.pretrained = pretrained
@@ -86,9 +87,10 @@ class ImageEncoder(nn.Module):
                 #----- Loss functions
                 # example: ContrastiveLoss, TripletMarginLoss, MultiSimilarityLoss,
                 # FastAPLoss, CircleLoss, SupConLoss,
-                loss_name='MultiSimilarityLoss',
-                miner_name='MultiSimilarityMiner', # example: TripletMarginMiner, MultiSimilarityMiner, PairMarginMiner
-                miner_margin=0.1)
+                loss_name="MultiSimilarityLoss",
+                miner_name="MultiSimilarityMiner",  # example: TripletMarginMiner, MultiSimilarityMiner, PairMarginMiner
+                miner_margin=0.1
+            )
         else:
             self.model = timm.create_model(
                 model_name,
