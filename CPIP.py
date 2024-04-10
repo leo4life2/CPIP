@@ -30,10 +30,10 @@ class CPIPModel(nn.Module):
         # shape: torch.Size([8, 3, 810, 1440])
         image_features = self.image_encoder(batch["image"])
         print(f"image_features: {image_features.shape}")
-        # output shape of image_features: torch.Size([8, 1024, 90, 51])
+        # output shape of image_features: torch.Size([8, 1024, 90, 51]) = [batch_size, channels, h, w]
 
         image_features = image_features.view(CFG.batch_size, CFG.channel, -1)
-        # image_features： torch.Size([8, 1024, 4590]) batch_size x image_embedding x (w*h)
+        # image_features： torch.Size([8, 1024, 4590]) = [batch_size, channels, w*h]
 
         location_features = batch["location"]
 

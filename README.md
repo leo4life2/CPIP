@@ -76,7 +76,7 @@ python main.py"
 Submit the customized SLURM script using:
 
 ```bash
-sbatch your_customized_script.sh
+sbatch your_customized_script.slurm
 ```
 
 ### Output and Model Saving
