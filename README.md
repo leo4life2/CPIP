@@ -66,7 +66,7 @@ singularity exec --nv \
 ${sif_path} /bin/bash -c "
 source /ext3/env.sh
 conda activate cpip
-python main.py"
+python pipeline.py"
 ```
 
 - `<YOUR_EMAIL>`, `<OVERLAY_FILE>`, `<SINGULARITY_IMAGE>`, and `<CPIP_DIRECTORY>` should be updated to reflect your project's specifics.
