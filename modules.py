@@ -40,10 +40,10 @@ class MixVPRModel(nn.Module):
         self.backbone = helper.get_backbone(
             backbone_arch, pretrained, layers_to_freeze, layers_to_crop
         )
-        #self.aggregator = helper.get_aggregator(agg_arch, agg_config)
+        self.aggregator = helper.get_aggregator(agg_arch, agg_config)
 
         self.backbone.to(CFG.device)
-        #self.aggregator.to(CFG.device)
+        self.aggregator.to(CFG.device)
 
         for p in self.backbone.parameters():
             p.requires_grad = CFG.trainable
@@ -51,7 +51,7 @@ class MixVPRModel(nn.Module):
 
     def forward(self, x):
         x = self.backbone(x)
-        #x = self.aggregator(x)
+        x = self.aggregator(x)
         return x
 
 
@@ -81,6 +81,9 @@ class ImageEncoder(nn.Module):
                 miner_name="MultiSimilarityMiner",  # example: TripletMarginMiner, MultiSimilarityMiner, PairMarginMiner
                 miner_margin=0.1
             )
+        elif model_name == "resnet50":
+            model = helper.get_backbone(
+            'resnet50', pretrained, layers_to_freeze = 2, layers_to_crop=[4])
         else:
             self.model = timm.create_model(
                 model_name,
@@ -124,7 +127,6 @@ class ImageProjectionHead(nn.Module):
         self.layer_norms = nn.ModuleList([nn.LayerNorm(dims[i+1]) for i in range(num_blocks)])
     
     def forward(self, x):
-        print(f"x.shape: {x.shape}")
         batch_size, channels, features = x.shape
         x = x.view(batch_size * channels, features)
 
@@ -171,15 +173,6 @@ class ProjectionHead(nn.Module):
             x = x + projected
             x = self.layer_norms[i](x)
         return x
-
-if __name__ == "__main__":
-    # Test ProjectionHead
-    x = torch.randn(8, 1024, 4590)
-    batch_size, channels, features = x.shape
-    x = x.view(batch_size * channels, features) #torch.Size([8192, 4590])
-    projection_head = ProjectionHead(4590, 256, 0.1, 1)
-    x = projection_head(x)
-    x = x.view(batch_size, channels, -1) #torch.Size([8, 1024, 256])
 
 
 

@@ -5,7 +5,7 @@ import torch
 # ==========================
 debug = True
 #data_path = "/scratch/zl3493/UNav-Dataset/810p/raw/000"
-data_path = "/scratch/jh7956/Datasets/000" # Junjie's datapath
+data_path = "/scratch/jh7956/Datasets/000/database" # Junjie's datapath
 
 # ==========================
 # Training Setup
@@ -24,7 +24,6 @@ process_data = True # Set to False if already have stored vector
 model_name = 'MixVPR'
 # Image Embedding Configuration
 # image_embedding = 1024 # for vit_large_patch14_dinov2
-#image_embedding = 1024
 location_embedding = 3
 contrastive_dimension = 256 # The embedding dimension that contrastive learning is done in
 image_projection_blocks = 1
@@ -47,9 +46,11 @@ temperature = 1.0
 img_width = 1440
 img_height = 810
 
-#encoder_output_height = round(img_height // 16)
-encoder_output_height = 51
-encoder_output_width = round(img_width // 16)
+# ==========================
+# Image Encoder Configuration
+# ==========================
+encoder_output_height = round(img_height / 16)
+encoder_output_width = round(img_width / 16)
 image_embedding = encoder_output_height * encoder_output_width
 channel = 1024
 

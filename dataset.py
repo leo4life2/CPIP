@@ -9,7 +9,7 @@ from torchvision import transforms
 import config as CFG
 import pdb
 
-class Dataset_for_query(torch.utils.data.Dataset):
+class DatasetForQuery(torch.utils.data.Dataset):
     def __init__(self, df, image_path, transforms=None):
         """
         Args:

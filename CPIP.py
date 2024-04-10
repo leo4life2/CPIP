@@ -29,7 +29,6 @@ class CPIPModel(nn.Module):
         # Getting Image Features
         # shape: torch.Size([8, 3, 810, 1440])
         image_features = self.image_encoder(batch["image"])
-        print(f"image_features: {image_features.shape}")
         # output shape of image_features: torch.Size([8, 1024, 90, 51])
 
         image_features = image_features.view(CFG.batch_size, CFG.channel, -1)
@@ -39,7 +38,6 @@ class CPIPModel(nn.Module):
 
         # Getting Image and Location Embeddings (with same dimension)
         image_embeddings = self.image_projection(image_features)
-        print(image_embeddings.shape)
         # image_embeddings: torch.Size([8, 1024, 256]) = batch_size x channel x contrastive_dimension
         location_embeddings = self.location_projection(location_features)
 
