@@ -11,7 +11,7 @@ data_path = "/scratch/zl3493/UNav-Dataset/810p/raw/000"
 # ==========================
 batch_size = 10
 num_workers = 0
-epochs = 70
+epochs = 150
 warmup_epochs = 5
 resume_training = True
 
@@ -25,7 +25,7 @@ image_embedding = 4096 # for MixVPR
 location_embedding = 3
 contrastive_dimension = 256 # The embedding dimension that contrastive learning is done in
 image_projection_blocks = 1
-location_projection_blocks = 2
+location_projection_blocks = 1
 projection_dropout = 0.1
 
 # Pretrained & Trainability Settings
@@ -43,13 +43,6 @@ temperature = 1.0
 #img_height = 518 # for vit_large_patch14_dinov2
 img_width = 1440
 img_height = 810
-
-# ==========================
-# Projection Head Configuration
-# ==========================
-num_projection_layers = 2
-projection_dim = 256
-dropout = 0.1
 
 # ==========================
 # Optimization Parameters
