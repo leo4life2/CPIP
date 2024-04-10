@@ -5,6 +5,7 @@ import utils
 from models import helper
 import pdb
 from typing import Union, Tuple
+import torch
 
 
 class MixVPRModel(nn.Module):
@@ -39,19 +40,18 @@ class MixVPRModel(nn.Module):
         self.backbone = helper.get_backbone(
             backbone_arch, pretrained, layers_to_freeze, layers_to_crop
         )
-        self.aggregator = helper.get_aggregator(agg_arch, agg_config)
+        #self.aggregator = helper.get_aggregator(agg_arch, agg_config)
 
         self.backbone.to(CFG.device)
-        self.aggregator.to(CFG.device)
+        #self.aggregator.to(CFG.device)
 
         for p in self.backbone.parameters():
             p.requires_grad = CFG.trainable
-        for p in self.aggregator.parameters():
-            p.requires_grad = CFG.trainable
+
 
     def forward(self, x):
         x = self.backbone(x)
-        x = self.aggregator(x)
+        #x = self.aggregator(x)
         return x
 
 
@@ -74,16 +74,6 @@ class ImageEncoder(nn.Module):
                 pretrained=True,
                 layers_to_freeze=2,
                 layers_to_crop=[4], # 4 crops the last resnet layer, 3 crops the 3rd, ...etc
-
-                agg_arch='MixVPR',
-                agg_config={'in_channels' : 1024,
-                        'in_h' : 90,
-                        'in_w' : 51,
-                        'out_channels' : 1024,
-                        'mix_depth' : 4,
-                        'mlp_ratio' : 1,
-                        'out_rows' : 4}, # the output dim will be (out_rows * out_channels)
-
                 #----- Loss functions
                 # example: ContrastiveLoss, TripletMarginLoss, MultiSimilarityLoss,
                 # FastAPLoss, CircleLoss, SupConLoss,
@@ -106,6 +96,47 @@ class ImageEncoder(nn.Module):
     def forward(self, x):
         return self.model(x)
 
+
+class ImageProjectionHead(nn.Module):
+    def __init__(
+        self, 
+        embedding_dim, 
+        projection_dim=256, 
+        dropout=0.1, 
+        num_blocks=1
+    ):
+        super().__init__()
+        self.num_blocks = num_blocks
+        
+        # Linearly transition in width
+        steps = num_blocks
+        step_size = (projection_dim - embedding_dim) // steps
+        dims = [embedding_dim + step_size * i for i in range(steps)] + [projection_dim]
+        
+        self.projection_layers = nn.ModuleList([nn.Linear(dims[i], dims[i+1]) for i in range(num_blocks)])
+        self.block_middle_parts = nn.ModuleList([
+            nn.Sequential(
+                nn.GELU(),
+                nn.Linear(dims[i+1], dims[i+1]),
+                nn.Dropout(dropout),
+            ) for i in range(num_blocks)
+        ])
+        self.layer_norms = nn.ModuleList([nn.LayerNorm(dims[i+1]) for i in range(num_blocks)])
+    
+    def forward(self, x):
+        print(f"x.shape: {x.shape}")
+        batch_size, channels, features = x.shape
+        x = x.view(batch_size * channels, features)
+
+        for i in range(self.num_blocks):
+            projected = self.projection_layers[i](x)
+            x = self.block_middle_parts[i](projected)
+            x = x + projected
+            x = self.layer_norms[i](x)
+
+        x = x.view(batch_size, channels, -1)
+
+        return x
 
 class ProjectionHead(nn.Module):
     def __init__(
@@ -140,6 +171,16 @@ class ProjectionHead(nn.Module):
             x = x + projected
             x = self.layer_norms[i](x)
         return x
+
+if __name__ == "__main__":
+    # Test ProjectionHead
+    x = torch.randn(8, 1024, 4590)
+    batch_size, channels, features = x.shape
+    x = x.view(batch_size * channels, features) #torch.Size([8192, 4590])
+    projection_head = ProjectionHead(4590, 256, 0.1, 1)
+    x = projection_head(x)
+    x = x.view(batch_size, channels, -1) #torch.Size([8, 1024, 256])
+
 
 
 # class LocationEncoder(nn.Module):
