@@ -12,7 +12,7 @@ data_path = "/scratch/jh7956/Datasets/000" # Junjie's datapath
 # ==========================
 batch_size = 8
 num_workers = 0
-epochs = 70
+epochs = 150
 warmup_epochs = 5
 resume_training = True
 do_train = True # Set to False if already have a trained model
@@ -28,7 +28,7 @@ model_name = 'MixVPR'
 location_embedding = 3
 contrastive_dimension = 256 # The embedding dimension that contrastive learning is done in
 image_projection_blocks = 1
-location_projection_blocks = 2
+location_projection_blocks = 1
 projection_dropout = 0.1
 
 # Pretrained & Trainability Settings
@@ -52,13 +52,6 @@ encoder_output_height = 51
 encoder_output_width = round(img_width // 16)
 image_embedding = encoder_output_height * encoder_output_width
 channel = 1024
-
-# ==========================
-# Projection Head Configuration
-# ==========================
-num_projection_layers = 2
-projection_dim = 256
-dropout = 0.1
 
 # ==========================
 # Optimization Parameters

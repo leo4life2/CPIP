@@ -147,9 +147,8 @@ def valid_epoch(model, valid_loader, writer, epoch):
 def train():
     writer = SummaryWriter()  # TensorBoard writer
 
-    # Log hyperparameters
-    for key, value in vars(CFG).items():
-        writer.add_text(f'Hyperparameters/{key}', str(value))
+    # Define hyperparameters to log
+    hparams = {key: value for key, value in vars(CFG).items() if not key.startswith('__')}
 
     train_df, valid_df = prepare_data(CFG.data_path)
 
@@ -173,6 +172,13 @@ def train():
     step = "epoch"
 
     best_loss = float("inf")
+    metrics = {
+        'best_loss': best_loss,
+        'train_loss': 0,
+        'valid_loss': 0,
+        'train_accuracy': 0,
+        'valid_accuracy': 0,
+    }
 
     for epoch in range(CFG.epochs):
         print(f"Epoch: {epoch + 1}")
@@ -180,13 +186,25 @@ def train():
         train_loss, train_accuracy = train_epoch(model, train_loader, optimizer, lr_scheduler, step, writer, epoch)
         valid_loss, valid_accuracy = valid_epoch(model, valid_loader, writer, epoch)
 
+        # Update metrics
+        metrics.update({
+            'train_loss': train_loss,
+            'valid_loss': valid_loss,
+            'train_accuracy': train_accuracy,
+            'valid_accuracy': valid_accuracy,
+        })
+
         # Update learning rate with ReduceLROnPlateau
         lr_scheduler.step(valid_loss)
 
         if valid_loss < best_loss:
             best_loss = valid_loss
+            metrics['best_loss'] = best_loss
             torch.save(model.state_dict(), "best.pt")
             print("Saved Best Model!")
+
+    # Log hyperparameters and final metrics
+    writer.add_hparams(hparam_dict=hparams, metric_dict=metrics)
 
     writer.close()
 
