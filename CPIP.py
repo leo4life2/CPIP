@@ -3,7 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 
 import config as CFG
-from modules import ImageEncoder, ProjectionHead, ImageProjectionHead, Pooling
+from modules import ImageEncoder, ProjectionHead, ImageProjectionHead
 
 import pdb
 
