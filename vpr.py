@@ -43,9 +43,10 @@ def vpr_recall(location: np.ndarray, matched_location: np.ndarray, threshold: in
         return False
 
 def do_vpr(database_vectors, query_vectors):
-    #top_k_values = [1, 2, 5, 10, 20]
-    top_k_values = [1]
+    top_k_values = [1, 2, 5, 10, 20]
+    #top_k_values = [1]
     vpr_success_rates = {}
+    writer = SummaryWriter()
 
     for k in top_k_values:
         print(f"Computing VPR for Top-{k}")
@@ -61,7 +62,11 @@ def do_vpr(database_vectors, query_vectors):
         vpr_success_rates[f'Top-{k}'] = vpr_success_rate
 
         print(f"{k} VPR successful rate: {vpr_success_rate*100}%")
-
+        # write to tensorboard
+        
+        writer.add_scalar("VPR Success Rate", vpr_success_rates)
+    
+    writer.close()
     return vpr_success_rates
 
 def generate_query_images(image_path, output_path, decay_factor):

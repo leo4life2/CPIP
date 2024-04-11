@@ -14,7 +14,7 @@ num_workers = 0
 epochs = 150
 warmup_epochs = 5
 resume_training = True
-do_train = True # Set to False if already have a trained model
+do_train = False # Set to False if already have a trained model
 process_data = True # Set to False if already have stored vector
 
 # ==========================
