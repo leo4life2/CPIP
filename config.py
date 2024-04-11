@@ -72,3 +72,4 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # VPR Configuration
 # ==========================
 vpr_threshold = 0.5
+top_k = 5

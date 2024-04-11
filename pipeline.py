@@ -26,6 +26,41 @@ from modules import MixVPRModel
 
 from vpr import do_vpr, get_vpr_descriptors, vpr_recall, compute_topk_match_vector
 
+# Step 1: to get the MixVPR descriptor D_q from image query
+def get_mixvpr_descriptors(query_image_path, query_vector_path = None):
+    print("Step 1: Getting MixVPR descriptors...")
+    model = get_mixvpr_model()
+    query_df = prepare_data(query_image_path)
+    query_loader = build_loaders(query_df, mode="valid")
+    if query_vector_path is None:
+        query_vector_path = os.path.join(query_image_path, "..", "query_vectors.npy")
+    query_vectors = get_vpr_descriptors(model, query_loader, CFG.device, query_vector_path)
+    return query_vectors
+
+
+# Step 4: Do similarity search in {D_f} with D_q, getting top K descriptors {D_a}. 
+def do_similarity_search(database_vectors, query_vectors,  k=5):
+    print("Step 4: Doing similarity search D_f with D_q")
+    matched_indices = compute_topk_match_vector(query_vectors, database_vectors, k=k)
+    return matched_indices
+
+#  Let P_a be the average of all {D_a} descriptors’s corresponding positions (average theta too)
+def get_average_position(matched_indices, k=5):
+    # suppose there is a npy file containing the positions of the database images, with the order of the database_vectors
+    database_positions = np.load(npy_file_path)
+    # get the positions of the matched images
+    matched_positions = database_positions[matched_indices]
+    # calculate the average of all matched positions
+    average_positions = np.mean(matched_positions, axis=1)
+    return average_positions
+
+# Step 5: Calculate distance D_1 between P_a and P_q 2. Calculate distance D_2 between P_d and P_q
+def calculate_distances(average_positions, query_position):
+    print("Step 5: Calculating distances...")
+    distance = np.linalg.norm(average_positions - query_position)
+    return distance
+
+
 def get_mixvpr_model():
     model = MixVPRModel(
         #---- Encoder

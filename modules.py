@@ -7,6 +7,8 @@ import pdb
 from typing import Union, Tuple
 import torch
 
+from pipeline import get_mixvpr_model
+
 
 class MixVPRModel(nn.Module):
     def __init__(
@@ -161,6 +163,47 @@ class ImageProjectionHead(ProjectionHead):
         x = x.view(batch_size, channels, -1)
         return x
 
+class Pooling():
+    def __init__(self):
+        model = MixVPRModel(
+        #---- Encoder
+        backbone_arch='resnet50',
+        pretrained=True,
+        layers_to_freeze=2,
+        layers_to_crop=[4], # 4 crops the last resnet layer, 3 crops the 3rd, ...etc
+
+        agg_arch='MixVPR',
+        agg_config={'in_channels' : 256,
+                # 'in_h' : 40,
+                # 'in_w' : 30,
+                'in_h' : 1,
+                'in_w' : 1,
+                'out_channels' : 1024,
+                'mix_depth' : 4,
+                'mlp_ratio' : 1,
+                'out_rows' : 4}, # the output dim will be (out_rows * out_channels)
+
+        #----- Loss functions
+        # example: ContrastiveLoss, TripletMarginLoss, MultiSimilarityLoss,
+        # FastAPLoss, CircleLoss, SupConLoss,
+        loss_name='MultiSimilarityLoss',
+        miner_name='MultiSimilarityMiner', # example: TripletMarginMiner, MultiSimilarityMiner, PairMarginMiner
+        miner_margin=0.1)
+    
+        state_dict = torch.load(CFG.mixvpr_checkpoint_name)
+        model.load_state_dict(state_dict)
+
+        self.aggregator = model.aggregator
+
+    def forward(self, x):
+        x = self.aggregator(x)
+        return x
+
+if __name__ == "__main__":
+    test_input = torch.randn(8, 256).to(CFG.device)
+    model = Pooling().to(CFG.device)
+    output = model(test_input)
+    print(output.shape)
 
 # class LocationEncoder(nn.Module):
 #     def __init__(self,

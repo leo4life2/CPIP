@@ -3,7 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 
 import config as CFG
-from modules import ImageEncoder, ProjectionHead, ImageProjectionHead
+from modules import ImageEncoder, ProjectionHead, ImageProjectionHead, Pooling
 
 import pdb
 
@@ -29,7 +29,6 @@ class CPIPModel(nn.Module):
         # Getting Image Features
         # shape: torch.Size([8, 3, 810, 1440])
         image_features = self.image_encoder(batch["image"])
-        print(f"image_features: {image_features.shape}")
         # output shape of image_features: torch.Size([8, 1024, 90, 51])
 
         image_features = image_features.view(CFG.batch_size, CFG.channel, -1)
@@ -64,7 +63,3 @@ if __name__ == "__main__":
         "location": torch.randn(8, 3, 1440, 810).to(CFG.device),
     }
     loss, logits = model(test_input)
-    print(loss)
-    print(logits)
-    pdb.set_trace()
-    print("Done")
