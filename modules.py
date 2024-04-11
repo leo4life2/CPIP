@@ -46,7 +46,7 @@ class MixVPRModel(nn.Module):
         self.aggregator.to(CFG.device)
 
         for p in self.backbone.parameters():
-            p.requires_grad = CFG.trainable
+            p.requires_grad = CFG.image_encoder_trainable
 
 
     def forward(self, x):
@@ -62,40 +62,37 @@ class ImageEncoder(nn.Module):
 
     def __init__(
         self,
-        model_name=CFG.model_name,
+        model_name=CFG.image_encoder_model_name,
         pretrained=CFG.pretrained,
-        trainable=CFG.trainable,
+        trainable=CFG.image_encoder_trainable,
     ):
         super().__init__()
         if model_name == "MixVPR":
             self.model = MixVPRModel(
-            #---- Encoder
-            backbone_arch='resnet50',
-            pretrained=True,
-            layers_to_freeze=2,
-            layers_to_crop=[4], # 4 crops the last resnet layer, 3 crops the 3rd, ...etc
+                #---- Encoder
+                backbone_arch='resnet50',
+                pretrained=True,
+                layers_to_freeze=2,
+                layers_to_crop=[4], # 4 crops the last resnet layer, 3 crops the 3rd, ...etc
 
-            agg_arch='MixVPR',
-            agg_config={'in_channels' : 1024,
-                    'in_h' : 40,
-                    'in_w' : 30,
-                    'out_channels' : 1024,
-                    'mix_depth' : 4,
-                    'mlp_ratio' : 1,
-                    'out_rows' : 4}, # the output dim will be (out_rows * out_channels)
+                agg_arch='MixVPR',
+                agg_config={'in_channels' : 1024,
+                        'in_h' : 40,
+                        'in_w' : 30,
+                        'out_channels' : 1024,
+                        'mix_depth' : 4,
+                        'mlp_ratio' : 1,
+                        'out_rows' : 4}, # the output dim will be (out_rows * out_channels)
 
-            #----- Loss functions
-            # example: ContrastiveLoss, TripletMarginLoss, MultiSimilarityLoss,
-            # FastAPLoss, CircleLoss, SupConLoss,
-            loss_name='MultiSimilarityLoss',
-            miner_name='MultiSimilarityMiner', # example: TripletMarginMiner, MultiSimilarityMiner, PairMarginMiner
-            miner_margin=0.1,
-            faiss_gpu=False,
-            freeze = freeze,
-            args = args)
+                #----- Loss functions
+                # example: ContrastiveLoss, TripletMarginLoss, MultiSimilarityLoss,
+                # FastAPLoss, CircleLoss, SupConLoss,
+                loss_name='MultiSimilarityLoss',
+                miner_name='MultiSimilarityMiner', # example: TripletMarginMiner, MultiSimilarityMiner, PairMarginMiner
+                miner_margin=0.1
+            )
         elif model_name == "resnet50":
-            self.model = helper.get_backbone(
-            'resnet50', pretrained, layers_to_freeze = 2, layers_to_crop=[4])
+            self.model = helper.get_backbone('resnet50', pretrained, layers_to_freeze=2, layers_to_crop=[4])
         else:
             self.model = timm.create_model(
                 model_name,
@@ -111,46 +108,6 @@ class ImageEncoder(nn.Module):
     def forward(self, x):
         return self.model(x)
 
-
-class ImageProjectionHead(nn.Module):
-    def __init__(
-        self, 
-        embedding_dim, 
-        projection_dim=256, 
-        dropout=0.1, 
-        num_blocks=1
-    ):
-        super().__init__()
-        self.num_blocks = num_blocks
-        
-        # Linearly transition in width
-        steps = num_blocks
-        step_size = (projection_dim - embedding_dim) // steps
-        dims = [embedding_dim + step_size * i for i in range(steps)] + [projection_dim]
-        
-        self.projection_layers = nn.ModuleList([nn.Linear(dims[i], dims[i+1]) for i in range(num_blocks)])
-        self.block_middle_parts = nn.ModuleList([
-            nn.Sequential(
-                nn.GELU(),
-                nn.Linear(dims[i+1], dims[i+1]),
-                nn.Dropout(dropout),
-            ) for i in range(num_blocks)
-        ])
-        self.layer_norms = nn.ModuleList([nn.LayerNorm(dims[i+1]) for i in range(num_blocks)])
-    
-    def forward(self, x):
-        batch_size, channels, features = x.shape
-        x = x.view(batch_size * channels, features)
-
-        for i in range(self.num_blocks):
-            projected = self.projection_layers[i](x)
-            x = self.block_middle_parts[i](projected)
-            x = x + projected
-            x = self.layer_norms[i](x)
-
-        x = x.view(batch_size, channels, -1)
-
-        return x
 
 class ProjectionHead(nn.Module):
     def __init__(
@@ -185,7 +142,24 @@ class ProjectionHead(nn.Module):
             x = x + projected
             x = self.layer_norms[i](x)
         return x
-
+    
+    
+class ImageProjectionHead(ProjectionHead):
+    def __init__(
+        self, 
+        embedding_dim, 
+        projection_dim=256, 
+        dropout=0.1, 
+        num_blocks=1
+    ):
+        super().__init__(embedding_dim, projection_dim, dropout, num_blocks)
+    
+    def forward(self, x):
+        batch_size, channels, features = x.shape
+        x = x.view(batch_size * channels, features)
+        x = super().forward(x)
+        x = x.view(batch_size, channels, -1)
+        return x
 
 
 # class LocationEncoder(nn.Module):

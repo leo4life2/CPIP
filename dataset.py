@@ -21,11 +21,8 @@ class CPIPDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, idx):
         # Retrieve image filename and location from the DataFrame
-        image_file = self.df.iloc[idx]['image']
+        image_path = self.df.iloc[idx]['image']
         location = self.df.iloc[idx]['location']
-
-        # Construct the full image path
-        image_path = os.path.join(CFG.data_path, image_file)
 
         # Load image
         image = cv2.imread(image_path)
@@ -42,24 +39,15 @@ class CPIPDataset(torch.utils.data.Dataset):
         item = {'image': image_tensor, 'location': location_tensor}
 
         return item
-
+    
     def __len__(self):
         return len(self.df)
 
-def get_transforms(mode="train"):
-    if mode == "train":
-        return A.Compose(
-            [
-                A.Resize(CFG.img_height, CFG.img_width, always_apply=True),
-                A.Normalize(max_pixel_value=255.0, always_apply=True),
-            ]
-        )
-    else:
-        return A.Compose(
-            [
-                A.Resize(CFG.img_height, CFG.img_width, always_apply=True),
-                A.Normalize(max_pixel_value=255.0, always_apply=True),
-            ]
-        )
-
-    
+def get_transforms():
+    return A.Compose(
+        [
+            A.CenterCrop(CFG.img_height, CFG.img_width, always_apply=True),
+            A.Resize(CFG.target_img_height, CFG.target_img_width, always_apply=True),
+            A.Normalize(max_pixel_value=255.0, always_apply=True),
+        ]
+    )

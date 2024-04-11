@@ -13,13 +13,13 @@ class CPIPModel(nn.Module):
         super().__init__()
         self.image_encoder = ImageEncoder()
         self.image_projection = ImageProjectionHead(
-            embedding_dim=CFG.image_embedding,
+            embedding_dim=CFG.image_embedding_dim,
             projection_dim=CFG.contrastive_dimension,
             dropout=CFG.projection_dropout,
             num_blocks=CFG.image_projection_blocks,
         )
         self.location_projection = ProjectionHead(
-            embedding_dim=CFG.location_embedding,
+            embedding_dim=CFG.location_embedding_dim,
             projection_dim=CFG.contrastive_dimension,
             dropout=CFG.projection_dropout,
             num_blocks=CFG.location_projection_blocks,

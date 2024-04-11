@@ -1,12 +1,6 @@
 import torch
 
 # ==========================
-# Basic Configuration
-# ==========================
-#data_path = "/scratch/zl3493/UNav-Dataset/810p/raw/000"
-data_path = "/scratch/jh7956/Datasets/000/database" # Junjie's datapath
-
-# ==========================
 # Training Setup
 # ==========================
 batch_size = 8
@@ -20,11 +14,13 @@ process_data = True # Set to False if already have stored vector
 # ==========================
 # Model Parameters
 # ==========================
-model_name = 'resnet50'
+cpip_checkpoint_name = ""
+image_encoder_model_name = 'resnet50'
+mixvpr_checkpoint_name = "resnet50_MixVPR_4096_channels(1024)_rows(4).ckpt"
 
 # Image Embedding Configuration
 # image_embedding = 1024 # for vit_large_patch14_dinov2
-location_embedding = 3
+location_embedding_dim = 3
 contrastive_dimension = 256 # The embedding dimension that contrastive learning is done in
 image_projection_blocks = 1
 location_projection_blocks = 1
@@ -32,6 +28,7 @@ projection_dropout = 0.1
 
 # Pretrained & Trainability Settings
 pretrained = True
+image_encoder_trainable = False
 trainable = True
 
 # Temperature for Softmax
@@ -46,12 +43,15 @@ temperature = 1.0
 img_width = 1440
 img_height = 810
 
+target_img_width = 320 # for mixvpr pretrained weights
+target_img_height = 320 # same as above
+
 # ==========================
 # Image Encoder Configuration
 # ==========================
 encoder_output_height = round(img_height / 16)
 encoder_output_width = round(img_width / 16)
-image_embedding = encoder_output_height * encoder_output_width
+image_embedding_dim = encoder_output_height * encoder_output_width
 channel = 1024
 
 # ==========================

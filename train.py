@@ -21,13 +21,14 @@ ssl._create_default_https_context = ssl._create_unverified_context  # workaround
 USER = os.environ.get("USER")
 os.environ['TORCH_HOME'] = f'/scratch/{USER}/pytorch'
 
-def prepare_data(data_path, test_size=0.2, random_state=42):
+def prepare_data(data_path):
     # List all .png files in the directory
     image_files = sorted([f for f in os.listdir(data_path) if f.endswith(".png")])
 
     # Prepare data
     data = []
     for image_file in image_files:
+        full_image_path = os.path.join(data_path, image_file)
         json_file = image_file.replace(".png", ".json")
         json_path = os.path.join(data_path, json_file)
 
@@ -38,17 +39,11 @@ def prepare_data(data_path, test_size=0.2, random_state=42):
         yaw = int(re.search(r"yaw(\d+)", image_file).group(1))
         location.append(yaw)
 
-        data.append({"image": image_file, "location": location})
+        data.append({"image": full_image_path, "location": location})
 
     # Convert to DataFrame for easy handling
     df = pd.DataFrame(data)
-
-    # Split into train and validation sets
-    train_df, valid_df = train_test_split(
-        df, test_size=test_size, random_state=random_state, shuffle=True
-    )
-
-    return train_df, valid_df
+    return df
 
 def calculate_metrics(logits, labels):
     _, predicted = torch.max(logits, 1)
@@ -61,7 +56,7 @@ def calculate_metrics(logits, labels):
     return accuracy, precision, recall, f1
 
 def build_loaders(dataframe, mode):
-    transforms = get_transforms(mode=mode)
+    transforms = get_transforms()
     dataset = CPIPDataset(dataframe, transforms=transforms)
     dataloader = torch.utils.data.DataLoader(
         dataset,
@@ -144,13 +139,18 @@ def valid_epoch(model, valid_loader, writer, epoch):
 
     return loss_meter.avg, accuracy_meter.avg
 
-def train():
-    writer = SummaryWriter()  # TensorBoard writer
-
+def train(data_path):
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    writer = SummaryWriter(log_dir=f"tensorboard/cpip_{timestamp}")
+    
     # Define hyperparameters to log
     hparams = {key: value for key, value in vars(CFG).items() if not key.startswith('__')}
 
-    train_df, valid_df = prepare_data(CFG.data_path)
+    data_df = prepare_data(data_path)
+    # Split into train and validation sets
+    train_df, valid_df = train_test_split(
+        data_df, test_size=0.2, random_state=42, shuffle=True
+    )
 
     train_loader = build_loaders(train_df, mode="train")
     valid_loader = build_loaders(valid_df, mode="valid")
@@ -158,10 +158,9 @@ def train():
     model = CPIPModel().to(CFG.device)
 
     # Check if best.pt exists and load it
-    best_model_path = "best.pt"
-    if os.path.exists(best_model_path) and CFG.resume_training:
+    if os.path.exists(CFG.cpip_checkpoint_name) and CFG.resume_training:
         model.load_state_dict(torch.load(best_model_path))
-        print("Loaded model weights from best.pt and resuming training...")
+        print(f"Loaded model weights from {CFG.cpip_checkpoint_name} and resuming training...")
 
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=CFG.lr, weight_decay=CFG.weight_decay
@@ -209,4 +208,5 @@ def train():
     writer.close()
 
 if __name__ == "__main__":
-    train()
+    data_path = "/scratch/zl3493/UNav-Dataset/810p/raw/000"
+    train(data_path)

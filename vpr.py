@@ -1,9 +1,12 @@
 import torch
 import numpy as np
-import tqdm
 import os
 import glob
+import config as CFG 
 import cv2
+from tqdm import tqdm
+from datetime import datetime
+from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
 
 # ----------------- VPR -----------------
@@ -46,83 +49,68 @@ def do_vpr(database_vectors, query_vectors):
     top_k_values = [1, 2, 5, 10, 20]
     #top_k_values = [1]
     vpr_success_rates = {}
-    writer = SummaryWriter()
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    writer = SummaryWriter(log_dir=f"tensorboard/vpr_{timestamp}")
 
     for k in top_k_values:
         print(f"Computing VPR for Top-{k}")
         matched_indices = compute_topk_match_vector(query_vectors, database_vectors, k=k)
         
         vpr_success = np.zeros((len(query_vectors), k), dtype=np.bool_)
+        distances = np.zeros((len(query_vectors), k), dtype=np.float32)
 
         for index in tqdm(range(len(query_vectors)), total=len(query_vectors), desc=f'Examining VPR for Top-{k}'):
-            for ki in range(k):  
-                vpr_success[index, ki] = vpr_recall(query_vectors[index], database_vectors[matched_indices[index, ki]], CFG.vpr_threshold)
+            for ki in range(k):
+                match_index = matched_indices[index, ki]
+                distance = np.linalg.norm(query_vectors[index] - database_vectors[match_index])
+                distances[index, ki] = distance
+                vpr_success[index, ki] = vpr_recall(query_vectors[index], database_vectors[match_index], CFG.vpr_threshold)
         
         vpr_success_rate = np.any(vpr_success, axis=1).mean()
+        average_distances = np.mean(distances, axis=1)
         vpr_success_rates[f'Top-{k}'] = vpr_success_rate
 
+        # Log distances
+        for ki in range(k):
+            writer.add_scalar(f"Average Distance/Top-{k}-{ki+1}", np.mean(distances[:, ki]), k)
+        writer.add_scalar(f"Average Distance/Top-{k}-All", np.mean(average_distances), k)
         print(f"{k} VPR successful rate: {vpr_success_rate*100}%")
-        # write to tensorboard
         
-        writer.add_scalar("VPR Success Rate", vpr_success_rates)
+        # write to tensorboard
+        writer.add_scalar(f"VPR Success Rate/Top-{k}", vpr_success_rate, k)
     
     writer.close()
     return vpr_success_rates
 
-def generate_query_images(image_path, output_path, decay_factor):
+def get_vpr_descriptors(model, data_loader, device, output_path):
     """
-    Processes an image by reducing its resolution by a given decay factor.
+    Compute VPR descriptors using the provided model.
 
     Args:
-        image_path (str): Path to the input image.
-        output_path (str): Directory to save the processed image.
-        decay_factor (int): The factor by which to reduce the image resolution.
-    """
-    image_paths = glob.glob(os.path.join(image_path, '*.png'))
-    feature_list = []
-
-    for image_path in image_paths:
-        frame = cv2.imread(image_path)
-        if frame is None:
-            print(f"Error opening image {image_path}")
-            continue
-
-        # Resize the image based on the decay factor
-        resized_frame = cv2.resize(frame, (frame.shape[1] // decay_factor, frame.shape[0] // decay_factor))
-
-        # Save the processed image
-        if not os.path.exists(output_path):
-            os.makedirs(output_path)
-        processed_image_name = os.path.join(output_path, os.path.basename(image_path).replace('.png', '_resized.png'))
-        cv2.imwrite(processed_image_name, resized_frame)
-
-def extract_features_from_images(model, image_path, output_path, data_loader, device):
-    """
-    Get the image features from the model and store it to the vector_path. Used for both database and query images.
-
-    Args:
-        model: The model to extract features from.
-        image_path (str): Path to the input image.
-        output_path (str): Directory to save the features.
+        model (torch.nn.Module): The model used to compute VPR descriptors.
+        data_loader (torch.utils.data.DataLoader): DataLoader containing the images.
+        device (torch.device): The device to perform computation on.
+        output_path (str): Path to save the descriptors.
     """
 
     model.eval()
-    features = []
+    descriptors = []
 
-    with torch.no_grad(): 
-        for batch in data_loader:
-            # Assuming 'image' key in batch dict
+    with torch.no_grad():
+        for batch in tqdm(data_loader, desc="Extracting Image Descriptors"):
             image_data = batch['image'].to(device)
-            image_features = model.image_encoder(image_data)
+            vpr_descriptors = model(image_data)
             
-            # Optionally, convert features to another form, e.g., numpy array
-            image_features_np = image_features.cpu().numpy()
-            features.append(image_features_np)
+            # Convert descriptors to numpy array for storage or further processing
+            vpr_descriptors_np = vpr_descriptors.cpu().numpy()
+            descriptors.append(vpr_descriptors_np)
 
-    # Save features to file
-    features_array = np.concatenate(features, axis=0)
+    # Concatenate all descriptors into a single numpy array
+    descriptors_array = np.concatenate(descriptors, axis=0)
+
     output_dir = os.path.dirname(output_path)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-    np.save(output_path, features_array)
+    np.save(output_path, descriptors_array)
 # ---------------------------------------
