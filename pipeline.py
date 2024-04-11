@@ -15,7 +15,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from dataset import CPIPDataset, DatasetForQuery, get_transforms
+from dataset import CPIPDataset, get_transforms
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 from utils_file import AvgMeter, get_lr

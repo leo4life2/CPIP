@@ -69,20 +69,32 @@ class ImageEncoder(nn.Module):
         super().__init__()
         if model_name == "MixVPR":
             self.model = MixVPRModel(
-                #---- Encoder
-                backbone_arch='resnet50',
-                pretrained=True,
-                layers_to_freeze=2,
-                layers_to_crop=[4], # 4 crops the last resnet layer, 3 crops the 3rd, ...etc
-                #----- Loss functions
-                # example: ContrastiveLoss, TripletMarginLoss, MultiSimilarityLoss,
-                # FastAPLoss, CircleLoss, SupConLoss,
-                loss_name="MultiSimilarityLoss",
-                miner_name="MultiSimilarityMiner",  # example: TripletMarginMiner, MultiSimilarityMiner, PairMarginMiner
-                miner_margin=0.1
-            )
+            #---- Encoder
+            backbone_arch='resnet50',
+            pretrained=True,
+            layers_to_freeze=2,
+            layers_to_crop=[4], # 4 crops the last resnet layer, 3 crops the 3rd, ...etc
+
+            agg_arch='MixVPR',
+            agg_config={'in_channels' : 1024,
+                    'in_h' : 40,
+                    'in_w' : 30,
+                    'out_channels' : 1024,
+                    'mix_depth' : 4,
+                    'mlp_ratio' : 1,
+                    'out_rows' : 4}, # the output dim will be (out_rows * out_channels)
+
+            #----- Loss functions
+            # example: ContrastiveLoss, TripletMarginLoss, MultiSimilarityLoss,
+            # FastAPLoss, CircleLoss, SupConLoss,
+            loss_name='MultiSimilarityLoss',
+            miner_name='MultiSimilarityMiner', # example: TripletMarginMiner, MultiSimilarityMiner, PairMarginMiner
+            miner_margin=0.1,
+            faiss_gpu=False,
+            freeze = freeze,
+            args = args)
         elif model_name == "resnet50":
-            model = helper.get_backbone(
+            self.model = helper.get_backbone(
             'resnet50', pretrained, layers_to_freeze = 2, layers_to_crop=[4])
         else:
             self.model = timm.create_model(

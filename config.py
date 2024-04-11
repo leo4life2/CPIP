@@ -3,7 +3,6 @@ import torch
 # ==========================
 # Basic Configuration
 # ==========================
-debug = True
 #data_path = "/scratch/zl3493/UNav-Dataset/810p/raw/000"
 data_path = "/scratch/jh7956/Datasets/000/database" # Junjie's datapath
 
@@ -21,7 +20,8 @@ process_data = True # Set to False if already have stored vector
 # ==========================
 # Model Parameters
 # ==========================
-model_name = 'MixVPR'
+model_name = 'resnet50'
+
 # Image Embedding Configuration
 # image_embedding = 1024 # for vit_large_patch14_dinov2
 location_embedding = 3
