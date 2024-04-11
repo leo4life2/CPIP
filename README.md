@@ -66,7 +66,7 @@ singularity exec --nv \
 ${sif_path} /bin/bash -c "
 source /ext3/env.sh
 conda activate cpip
-python main.py"
+python pipeline.py --data_path /scratch/zl3493/UNav-Dataset/810p/raw/000"
 ```
 
 - `<YOUR_EMAIL>`, `<OVERLAY_FILE>`, `<SINGULARITY_IMAGE>`, and `<CPIP_DIRECTORY>` should be updated to reflect your project's specifics.
@@ -76,7 +76,7 @@ python main.py"
 Submit the customized SLURM script using:
 
 ```bash
-sbatch your_customized_script.sh
+sbatch your_customized_script.slurm
 ```
 
 ### Output and Model Saving

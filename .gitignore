@@ -1,4 +1,5 @@
 __pycache__/
 metrics.csv
 runs/
+tensorboard/
 *.pt
