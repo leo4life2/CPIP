@@ -6,10 +6,11 @@ import config as CFG
 import cv2
 from tqdm import tqdm
 from datetime import datetime
+from dataset import prepare_image
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
 
-# ----------------- VPR -----------------
+
 def compute_topk_match_vector(query_vectors, database_vectors, k=1, batch_size=100) -> np.ndarray:
     query_torch = torch.tensor(query_vectors).float().cuda()
     database_torch = torch.tensor(database_vectors).float().cuda()
@@ -21,6 +22,7 @@ def compute_topk_match_vector(query_vectors, database_vectors, k=1, batch_size=1
         end_idx = min(start_idx + batch_size, num_queries)
         batch = query_torch[start_idx:end_idx]
 
+        # Dot product similarity
         prod = torch.einsum('ik,jk->ij', batch, database_torch)
 
         # Find the Top-K matches in the database for each vector in the batch
@@ -94,7 +96,6 @@ def get_vpr_descriptors(model, data_loader, device, output_path):
         output_path (str): Path to save the descriptors.
     """
 
-    model.eval()
     descriptors = []
 
     with torch.no_grad():
@@ -108,9 +109,4 @@ def get_vpr_descriptors(model, data_loader, device, output_path):
 
     # Concatenate all descriptors into a single numpy array
     descriptors_array = np.concatenate(descriptors, axis=0)
-
-    output_dir = os.path.dirname(output_path)
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-    np.save(output_path, descriptors_array)
-# ---------------------------------------
+    return descriptors_array

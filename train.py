@@ -56,8 +56,7 @@ def calculate_metrics(logits, labels):
     return accuracy, precision, recall, f1
 
 def build_loaders(dataframe, mode):
-    transforms = get_transforms()
-    dataset = CPIPDataset(dataframe, transforms=transforms)
+    dataset = CPIPDataset(dataframe)
     dataloader = torch.utils.data.DataLoader(
         dataset,
         batch_size=CFG.batch_size,
