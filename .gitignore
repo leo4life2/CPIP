@@ -3,3 +3,4 @@ metrics.csv
 runs/
 tensorboard/
 *.pt
+resnet50_MixVPR_4096_channels(1024)_rows(4).ckpt
