@@ -16,6 +16,7 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import pandas as pd
 from scipy.spatial.transform import Rotation as R
 from dataset import CPIPDataset, get_transforms
 from sklearn.model_selection import train_test_split
@@ -23,7 +24,7 @@ from tqdm import tqdm
 from utils_file import AvgMeter, get_lr
 from CPIP import CPIPModel
 from cpip_train import prepare_data, build_loaders, train_epoch, valid_epoch, calculate_metrics, train
-from modules import MixVPRModel
+from modules import MixVPRModel, ShallowConvNet
 
 from vpr import do_vpr, get_vpr_descriptors, vpr_recall, compute_topk_match_vector
 
@@ -172,29 +173,64 @@ def generate_grid(locations):
     
     return grid_points_with_theta
 
-def get_location_descriptors(cpip_model, locations):
+def get_location_descriptors(mixvpr_agg, cpip_model, locations):
     location_encoder = cpip_model.location_projection
+    encoded_locations = location_encoder(locations)  # Encode all location vectors
+    encoded_locations = encoded_locations.view(-1, CFG.contrastive_dimension)  # Ensure shape is [N, 256]
+
+    # Reshape to [1, sqrt(256), sqrt(256)] for each vector
+    dimension_size = int(CFG.contrastive_dimension**0.5)
+    reshaped_locations = encoded_locations.view(-1, 1, dimension_size, dimension_size)
+
+    # Create and apply CNN model
+    cnn_model = ShallowConvNet(input_c=1, input_h=dimension_size, input_w=dimension_size, output_c=1024, output_h=20, output_w=20)
+    descriptors = cnn_model(reshaped_locations)  # Output shape [N, 1024, 20, 20]
+
+    synthetic_descriptors = mixvpr_agg(descriptors)
+
+    # Create a DataFrame to return locations and their corresponding descriptors
+    descriptors_df = pd.DataFrame({
+        "locations": [loc.tolist() for loc in locations],
+        "descriptors": [desc.squeeze().tolist() for desc in synthetic_descriptors]
+    })
+
+    return descriptors_df
     
 
 def main(data_path):
     print("Starting the pipeline...")
+    
     mixvpr_model = get_mixvpr_model()
+    cpip_model = get_cpip_model()
+    
     # 1. Obtain database and query vectors
     db_df, query_df = load_or_generate_dataframes(mixvpr_model, data_path)
     
     # 2.
     # Get top k closest descriptors {D_d} for all input D_q
-    matched_indices = do_similarity_search(database_vectors, query_vectors, k=CFG.top_k)
+    matched_indices = do_similarity_search(db_df['descriptors'].tolist(), query_vectors, k=CFG.top_k)
     # Get P_d for all {D_d}
     query_average_positions = get_average_position(db_df, matched_indices)
     # Get grid points for all P_d
     grid_points = generate_grid(query_average_positions)
     
     # 3. Generate synthetic descriptors for all locations
+    synthetic_descriptors_df = get_location_descriptors(mixvpr_model.aggregator, cpip_model, grid_points)
     
+    # 4. Complete the similarity search for synthetic descriptors against query descriptors
+    synthetic_d_match_ixs = do_similarity_search(synthetic_descriptors_df['descriptors'].tolist(), query_df['descriptors'].tolist(), k=CFG.top_k)
+    # Get P_a for all {D_a}
+    synthetic_query_avg_positions = get_average_position(synthetic_descriptors_df, synthetic_d_match_ixs)
+
+    # 5. Calculate distances between query positions and average positions
+    # Calculate distance D_1 between P_a and P_q
+    distance_D1 = np.linalg.norm(query_df['positions'].values - synthetic_query_avg_positions, axis=1)
+    # Calculate distance D_2 between P_d and P_q
+    query_average_positions = get_average_position(db_df, matched_indices)
+    distance_D2 = np.linalg.norm(query_df['positions'].values - query_average_positions, axis=1)
     
-    vpr_success_rates = do_vpr(database_vectors, query_vectors)
-    print("VPR success rates:", vpr_success_rates)
+    # vpr_success_rates = do_vpr(db_df['descriptors'].tolist(), query_df['descriptors'].tolist())
+    # print("VPR success rates:", vpr_success_rates)
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run the VPR pipeline.")
