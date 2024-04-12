@@ -192,7 +192,7 @@ def main(data_path):
     mixvpr_model = get_mixvpr_model()
     cpip_model = get_cpip_model()
     
-    print("Step 1: Obtaining database and query vectors")
+    print("Obtaining database and query vectors")
     # Obtain database and query vectors
     db_df, query_df = load_or_generate_dataframes(mixvpr_model, data_path)
     
@@ -238,6 +238,8 @@ def main(data_path):
         
         # Calculate distances
         query_positions_batch = query_df['location'].values[start_idx:end_idx]
+        query_positions_batch = np.array([np.array(pos) for pos in query_positions_batch])
+        
         distance_synthetic = np.linalg.norm(query_positions_batch - synthetic_query_avg_positions, axis=1)
         distance_mixvpr_best_match = np.linalg.norm(query_positions_batch - query_average_positions, axis=1)
         
@@ -247,9 +249,6 @@ def main(data_path):
         all_distances_mixvpr_best_match.extend(distance_mixvpr_best_match)
 
     # Aggregate results
-    print("Aggregating results...")
-    all_distances_synthetic = np.concatenate(all_distances_synthetic)
-    all_distances_mixvpr_best_match = np.concatenate(all_distances_mixvpr_best_match)
     print("Average distance to synthetic descriptors:", np.mean(all_distances_synthetic))
     print("Minimum distance to synthetic descriptors:", np.min(all_distances_synthetic))
     print("Maximum distance to synthetic descriptors:", np.max(all_distances_synthetic))
