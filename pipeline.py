@@ -144,6 +144,7 @@ def get_orientation(mp1,vp1):
         id1.append(len(kp1)-3)
         
     return x1,y1,theta1,id1
+
 def get_mixvpr_model():
     model = MixVPRModel(
         #---- Encoder
