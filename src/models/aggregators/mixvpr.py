@@ -56,7 +56,8 @@ class MixVPR(nn.Module):
         self.row_proj = nn.Linear(hw, out_rows)
 
     def forward(self, x):
-        x = x.flatten(2)
+        # input x shape: (b, c, h, w)
+        x = x.flatten(2) # x shape now: (b, c, h*w)
         x = self.mix(x)
         x = x.permute(0, 2, 1)
         x = self.channel_proj(x)
