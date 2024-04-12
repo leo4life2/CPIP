@@ -1,4 +1,4 @@
-# CPIP: Contrastive Position-Image Pertaining for VPR
+# CPIP: Contrastive Position-Image Pretraining for VPR
 
 CPIP is a project adapted from the implementation of CLIP (Contrastive Language–Image Pre-training) aimed at enhancing Visual Place Recognition (VPR). By leveraging contrastive learning between position and image data, CPIP aims to improve the accuracy and robustness of VPR systems.
 
