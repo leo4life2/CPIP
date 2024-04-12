@@ -1,57 +1,42 @@
 import argparse
-import csv
-import glob
-import json
 import os
-import pdb
 import pickle
-import re
-from torch.utils.tensorboard import SummaryWriter
-
 import config as CFG
 import math
-import cv2
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import pandas as pd
-from scipy.spatial.transform import Rotation as R
-from dataset import CPIPDataset, get_transforms
-from sklearn.model_selection import train_test_split
-from tqdm import tqdm
-from utils_file import AvgMeter, get_lr
 from CPIP import CPIPModel
+from tqdm import tqdm
 from cpip_train import prepare_data, build_loaders, train_epoch, valid_epoch, calculate_metrics, train
 from modules import MixVPRModel, ShallowConvNet
-
 from vpr import do_vpr, get_vpr_descriptors, vpr_recall, compute_topk_match_vector
 
 def get_mixvpr_descriptors_for_dir(model, image_path, save_path):
     df = prepare_data(image_path)
     loader = build_loaders(df, mode="valid")
     vectors = get_vpr_descriptors(model, loader, CFG.device, save_path)
-    df['descriptors'] = vectors
+    df['descriptors'] = list(vectors)
     return df
 
 # Do similarity search in {D_f} with D_q, getting top K descriptors {D_a}. 
-def get_average_position(df, matched_indices):
-    positions = df['location'].values  # Extract locations as a numpy array
+def do_similarity_search(database_vectors, query_vectors, k=5, batch=False):
+    return compute_topk_match_vector(query_vectors, database_vectors, k=k)
 
-    # Get the positions of the matched images
-    # matched_indices is a 2D array where each row corresponds to the top k matches for each query
-    matched_positions = np.array([positions[indices] for indices in matched_indices])
+# Getting top K descriptors {D_a}. 
+def get_average_position(database, matched_indices):
+    if len(database.shape) == 2:  # Original case: shape (database_rows, 3)
+        positions = np.array(database['location'].tolist())  # Convert list of lists to a numpy array of numpy arrays
+    elif len(database.shape) == 3:  # New case: shape (batchsize, database_rows, 3)
+        positions = database  # Directly use the numpy array
+
+    # Ensure matched_indices is used to index positions correctly
+    if len(database.shape) == 2:
+        matched_positions = np.array([positions[indices] for indices in matched_indices])
+    elif len(database.shape) == 3:
+        matched_positions = np.array([positions[i, indices] for i, indices in enumerate(matched_indices)])
 
     # Calculate the average of all matched positions
-    # We average across axis=1, which is the new axis representing the matched positions for each query
-    average_positions = np.mean(matched_positions, axis=1)
-    return average_positions
-# Let P_a be the average of all {D_a} descriptors’s corresponding positions (average theta too)
-def get_average_position(database, matched_indices):
-    # get the positions of the matched images
-    matched_positions = database_positions[matched_indices]
-    # calculate the average of all matched positions
     average_positions = np.mean(matched_positions, axis=1)
     return average_positions
 
@@ -94,9 +79,8 @@ def get_mixvpr_model():
 
 def get_cpip_model():
     model = CPIPModel().to(CFG.device)
-
-    if os.path.exists(CFG.cpip_checkpoint_name):
-        model.load_state_dict(torch.load(best_model_path))
+    if os.path.exists(CFG.cpip_checkpoint_path):
+        model.load_state_dict(torch.load(CFG.cpip_checkpoint_path))
     else:
         print("WARNING: No weights for CPIP model")
         
@@ -133,8 +117,10 @@ def generate_grid(locations):
         locations (torch.Tensor): A tensor of locations with shape (N, 3) where each row is (x, y, theta).
 
     Returns:
-        torch.Tensor: A tensor containing grid points with shape (N, ((2*CFG.grid_extent+1)**2 - 1) * CFG.num_rotation_steps, 3).
+        torch.Tensor: A tensor containing grid points with shape (N, num_points, 3).
+            num_points = ((2*CFG.grid_extent+1)**2 - 1) * CFG.num_rotation_steps
     """
+    locations = torch.tensor(locations, device=CFG.device)
     # Extract x and y coordinates from the first two dimensions of the input tensor
     x_center, y_center = locations[:, 0], locations[:, 1]
     
@@ -170,31 +156,34 @@ def generate_grid(locations):
     
     # Reshape to final size (N, (2*CFG.grid_extent+1)**2 - 1 * CFG.num_rotation_steps, 3)
     grid_points_with_theta = grid_points_with_theta.reshape(locations.size(0), -1, 3)
-    
-    return grid_points_with_theta
+    return grid_points_with_theta.float()
 
 def get_location_descriptors(mixvpr_agg, cpip_model, locations):
     location_encoder = cpip_model.location_projection
-    encoded_locations = location_encoder(locations)  # Encode all location vectors
-    encoded_locations = encoded_locations.view(-1, CFG.contrastive_dimension)  # Ensure shape is [N, 256]
+    with torch.no_grad():
+        encoded_locations = location_encoder(locations)  # Encode all location vectors
+        # let num_points = ((2*CFG.grid_extent+1)**2 - 1) * CFG.num_rotation_steps,
+        # encoded_locations shape: (b, num_points, CFG.contrastive_dimension)
 
-    # Reshape to [1, sqrt(256), sqrt(256)] for each vector
-    dimension_size = int(CFG.contrastive_dimension**0.5)
-    reshaped_locations = encoded_locations.view(-1, 1, dimension_size, dimension_size)
+        # current contrastive_dimension = 256
+        # Reshape to [1, sqrt(256), sqrt(256)] for each vector
+        b, num_points, _ = encoded_locations.shape
+        dimension_size = int(CFG.contrastive_dimension**0.5)
+        reshaped_locations = encoded_locations.view(b * num_points, 1, dimension_size, dimension_size)
 
-    # Create and apply CNN model
-    cnn_model = ShallowConvNet(input_c=1, input_h=dimension_size, input_w=dimension_size, output_c=1024, output_h=20, output_w=20)
-    descriptors = cnn_model(reshaped_locations)  # Output shape [N, 1024, 20, 20]
+        # Create and apply CNN model
+        cnn_model = ShallowConvNet(input_c=1, input_h=dimension_size, input_w=dimension_size, output_c=1024, output_h=20, output_w=20).to(CFG.device)
+        # TODO: cnn weights
+        cnn_model.eval()
+        descriptors = cnn_model(reshaped_locations)
 
-    synthetic_descriptors = mixvpr_agg(descriptors)
-
-    # Create a DataFrame to return locations and their corresponding descriptors
-    descriptors_df = pd.DataFrame({
-        "locations": [loc.tolist() for loc in locations],
-        "descriptors": [desc.squeeze().tolist() for desc in synthetic_descriptors]
-    })
-
-    return descriptors_df
+        synthetic_descriptors = mixvpr_agg(descriptors) # Shape: (b * num_points, out_rows * out_channels)
+        # at this point, (800, 1, 16, 16) takes about 20gb vram. 
+        synthetic_descriptors = synthetic_descriptors.view(b, num_points, 4 * 1024)
+        
+        # Combine locations and descriptors into a single tensor
+        combined_data = torch.cat((locations, synthetic_descriptors), dim=2)  # Shape: (batchsize, numpoints, 4099)
+        return combined_data
     
 
 def main(data_path):
@@ -203,35 +192,71 @@ def main(data_path):
     mixvpr_model = get_mixvpr_model()
     cpip_model = get_cpip_model()
     
-    # 1. Obtain database and query vectors
+    print("Step 1: Obtaining database and query vectors")
+    # Obtain database and query vectors
     db_df, query_df = load_or_generate_dataframes(mixvpr_model, data_path)
     
-    # 2.
-    # Get top k closest descriptors {D_d} for all input D_q
-    matched_indices = do_similarity_search(db_df['descriptors'].tolist(), query_vectors, k=CFG.top_k)
-    # Get P_d for all {D_d}
-    query_average_positions = get_average_position(db_df, matched_indices)
-    # Get grid points for all P_d
-    grid_points = generate_grid(query_average_positions)
+    # Convert the list of numpy arrays in db_df['descriptors'] into a 2D numpy array
+    database_vectors = np.stack(db_df['descriptors'].values)
     
-    # 3. Generate synthetic descriptors for all locations
-    synthetic_descriptors_df = get_location_descriptors(mixvpr_model.aggregator, cpip_model, grid_points)
-    
-    # 4. Complete the similarity search for synthetic descriptors against query descriptors
-    synthetic_d_match_ixs = do_similarity_search(synthetic_descriptors_df['descriptors'].tolist(), query_df['descriptors'].tolist(), k=CFG.top_k)
-    # Get P_a for all {D_a}
-    synthetic_query_avg_positions = get_average_position(synthetic_descriptors_df, synthetic_d_match_ixs)
+    # Initialize lists to collect results
+    all_synthetic_query_avg_positions = []
+    all_distances_synthetic = []
+    all_distances_mixvpr_best_match = []
 
-    # 5. Calculate distances between query positions and average positions
-    # Calculate distance D_1 between P_a and P_q
-    distance_D1 = np.linalg.norm(query_df['positions'].values - synthetic_query_avg_positions, axis=1)
-    # Calculate distance D_2 between P_d and P_q
-    query_average_positions = get_average_position(db_df, matched_indices)
-    distance_D2 = np.linalg.norm(query_df['positions'].values - query_average_positions, axis=1)
-    
-    # vpr_success_rates = do_vpr(db_df['descriptors'].tolist(), query_df['descriptors'].tolist())
-    # print("VPR success rates:", vpr_success_rates)
+    # Process in batches of 5 query vectors
+    num_queries = len(query_df)
+    batch_size = 50
+    for start_idx in tqdm(range(0, num_queries, batch_size), desc="Processing query batches"):
+        end_idx = min(start_idx + batch_size, num_queries)
+        query_vectors_batch = np.stack(query_df['descriptors'].values[start_idx:end_idx])
+        
+        # Get top k closest descriptors {D_d} for all input D_q in the batch
+        matched_indices = do_similarity_search(database_vectors, query_vectors_batch, k=CFG.top_k)
+        # Get P_d for all {D_d}
+        query_average_positions = get_average_position(db_df, matched_indices)
+        # Get grid points for all P_d
+        grid_points = generate_grid(query_average_positions)
+        
+        # Generate synthetic descriptors for all locations
+        synthetic_data = get_location_descriptors(mixvpr_model.aggregator, cpip_model, grid_points)
+        # Shape: (batchsize, numpoints, 4096 + 3)
+        
+        # Extract descriptors and locations from synthetic_data
+        synthetic_descriptors = synthetic_data[:, :, 3:]  # Descriptors are after the first 3 columns which are locations
+        synthetic_locations = synthetic_data[:, :, :3]  # Locations are the first 3 columns
 
+        # Convert synthetic_descriptors to numpy array for similarity search
+        synthetic_descriptors_array = synthetic_descriptors.cpu().numpy()
+        
+        # Complete the similarity search for synthetic descriptors against query descriptors
+        query_vectors_batch = np.stack(query_df['descriptors'].values[start_idx:end_idx])
+        synthetic_d_match_ixs = do_similarity_search(synthetic_descriptors_array, query_vectors_batch, k=CFG.top_k, batch=True)
+        
+        # Get P_a for all {D_a}
+        synthetic_query_avg_positions = get_average_position(synthetic_locations.cpu().numpy(), synthetic_d_match_ixs)
+        
+        # Calculate distances
+        query_positions_batch = query_df['location'].values[start_idx:end_idx]
+        distance_synthetic = np.linalg.norm(query_positions_batch - synthetic_query_avg_positions, axis=1)
+        distance_mixvpr_best_match = np.linalg.norm(query_positions_batch - query_average_positions, axis=1)
+        
+        # Collect results
+        all_synthetic_query_avg_positions.append(synthetic_query_avg_positions)
+        all_distances_synthetic.extend(distance_synthetic)
+        all_distances_mixvpr_best_match.extend(distance_mixvpr_best_match)
+
+    # Aggregate results
+    print("Aggregating results...")
+    all_distances_synthetic = np.concatenate(all_distances_synthetic)
+    all_distances_mixvpr_best_match = np.concatenate(all_distances_mixvpr_best_match)
+    print("Average distance to synthetic descriptors:", np.mean(all_distances_synthetic))
+    print("Minimum distance to synthetic descriptors:", np.min(all_distances_synthetic))
+    print("Maximum distance to synthetic descriptors:", np.max(all_distances_synthetic))
+    print("Average distance to MixVPR's best match:", np.mean(all_distances_mixvpr_best_match))
+    print("Minimum distance to MixVPR's best match:", np.min(all_distances_mixvpr_best_match))
+    print("Maximum distance to MixVPR's best match:", np.max(all_distances_mixvpr_best_match))
+    
 def parse_args():
     parser = argparse.ArgumentParser(description="Run the VPR pipeline.")
     parser.add_argument('--data_path', type=str, required=True, help='Path to the data.')

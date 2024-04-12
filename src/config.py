@@ -8,12 +8,12 @@ num_workers = 0
 epochs = 150
 warmup_epochs = 5
 resume_training = True
-process_data = True # Set to False if already have stored vector
+process_data = False # Set to False if already have stored vector
 
 # ==========================
 # Model Parameters
 # ==========================
-cpip_checkpoint_name = ""
+cpip_checkpoint_path = ""
 image_encoder_model_name = 'resnet50'
 mixvpr_checkpoint_name = "resnet50_MixVPR_4096_channels(1024)_rows(4).ckpt"
 
@@ -75,6 +75,6 @@ top_k = 5
 
 # Hyperparameters for grid generation
 grid_spacing = 0.01  # distance between points
-grid_extent = 5     # number of points to generate in each direction (left, right, up, down)
+grid_extent = 1     # number of points to generate in each direction (left, right, up, down)
 
-num_rotation_steps = 4  # Number of rotations to cover 360 degrees for synthesizing position descriptors
+num_rotation_steps = 2  # Number of rotations to cover 360 degrees for synthesizing position descriptors

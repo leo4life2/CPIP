@@ -13,7 +13,7 @@ from dataset import CPIPDataset, get_transforms
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import precision_score, recall_score, f1_score
 from tqdm import tqdm
-from utils_file import AvgMeter, get_lr
+from cpip_utils import AvgMeter, get_lr
 import pdb
 import ssl
 

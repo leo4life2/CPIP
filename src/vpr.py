@@ -10,26 +10,42 @@ from dataset import prepare_image
 from torch.utils.tensorboard import SummaryWriter
 from torch.utils.data import DataLoader
 
+def compute_topk_match_vector(query_vectors, database_vectors, k=1) -> np.ndarray:
+    if len(database_vectors.shape) == 3:
+        # Batch mode: database_vectors shape is (batchsize, dbsize, feature_dim)
+        batchsize = database_vectors.shape[0]
+        dbsize = database_vectors.shape[1]
+        matched_indices = np.zeros((batchsize, k), dtype=int)
 
-def compute_topk_match_vector(query_vectors, database_vectors, k=1, batch_size=100) -> np.ndarray:
-    query_torch = torch.tensor(query_vectors).float().cuda()
-    database_torch = torch.tensor(database_vectors).float().cuda()
-    
-    num_queries = query_vectors.shape[0]
-    matched_indices = torch.zeros((num_queries, k), dtype=torch.int64).cuda()
+        for b in range(batchsize):
+            # Each query vector is compared only with its corresponding batch of database vectors
+            query_vector = query_vectors[b:b+1]  # Shape: (1, feature_dim)
+            db_vectors = database_vectors[b]     # Shape: (dbsize, feature_dim)
 
-    for start_idx in tqdm(range(0, num_queries, batch_size), desc="Computing matches"):
-        end_idx = min(start_idx + batch_size, num_queries)
-        batch = query_torch[start_idx:end_idx]
+            # Compute dot product similarity
+            prod = np.dot(query_vector, db_vectors.T)  # Shape: (1, dbsize)
 
-        # Dot product similarity
-        prod = torch.einsum('ik,jk->ij', batch, database_torch)
+            # Find the Top-K matches in the database for the query vector
+            indices = np.argsort(-prod, axis=1)[:, :k]
+            matched_indices[b, :] = indices.flatten()  # Flatten to fit the expected shape
 
-        # Find the Top-K matches in the database for each vector in the batch
-        _, indices = torch.topk(prod, k, dim=1, largest=True)
-        matched_indices[start_idx:end_idx, :] = indices
+    else:
+        # Non-batch mode: database_vectors shape is (dbsize, feature_dim)
+        num_queries = query_vectors.shape[0]
+        matched_indices = np.zeros((num_queries, k), dtype=int)
 
-    return matched_indices.cpu().numpy()
+        for start_idx in range(0, num_queries, k):
+            end_idx = min(start_idx + k, num_queries)
+            batch_query = query_vectors[start_idx:end_idx]
+
+            # Compute dot product similarity
+            prod = np.dot(batch_query, database_vectors.T)
+
+            # Find the Top-K matches in the database for each vector in the batch
+            indices = np.argsort(-prod, axis=1)[:, :k]
+            matched_indices[start_idx:end_idx, :] = indices
+
+    return matched_indices
 
 def vpr_recall(location: np.ndarray, matched_location: np.ndarray, threshold: int) -> bool:
     """
