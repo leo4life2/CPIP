@@ -157,7 +157,7 @@ def train(data_path):
 
     model = CPIPModel().to(CFG.device)
 
-    if os.path.exists(CFG.cpip_checkpoint_name) and CFG.resume_training:
+    if os.path.exists(CFG.cpip_checkpoint_path) and CFG.resume_training:
         model.load_state_dict(torch.load(best_model_path))
         print(f"Loaded model weights from {CFG.cpip_checkpoint_name} and resuming training...")
 

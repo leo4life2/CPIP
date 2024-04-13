@@ -12,6 +12,8 @@ from cpip_train import prepare_data, build_loaders, train_epoch, valid_epoch, ca
 from modules import MixVPRModel, ShallowConvNet
 from vpr import do_vpr, get_vpr_descriptors, vpr_recall, compute_topk_match_vector
 
+import pdb
+
 def get_mixvpr_descriptors_for_dir(model, image_path, save_path):
     df = prepare_data(image_path)
     loader = build_loaders(df, mode="valid")
@@ -198,7 +200,7 @@ def main(data_path):
     
     # Convert the list of numpy arrays in db_df['descriptors'] into a 2D numpy array
     database_vectors = np.stack(db_df['descriptors'].values)
-    
+
     # Initialize lists to collect results
     all_synthetic_query_avg_positions = []
     all_distances_synthetic = []

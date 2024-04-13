@@ -27,26 +27,38 @@ class CPIPModel(nn.Module):
 
     def forward(self, batch):
         # Getting Image Features
-        # shape: torch.Size([8, 3, 810, 1440])
         image_features = self.image_encoder(batch["image"])
-        # output shape of image_features: torch.Size([8, 1024, 90, 51])
+        # batch[image] shape:  (batch_size, 3, target_img_width, target_img_height) = [8, 3, 320, 320]
+        # image_features shape: (batch_size, channels, encoder_output_height, encoder_output_width) = [8, 1024, 20, 20]
 
         image_features = image_features.view(CFG.batch_size, CFG.channel, -1)
-        # image_features： torch.Size([8, 1024, 4590]) = [batch_size, channels, w*h]
+        # image_features shape: (batch_size, channels, encoder_output_height * encoder_output_width) = [8, 1024, 400]
 
         location_features = batch["location"]
+        # batch[location] shape:  (batch_size, 3) = [8, 3]
 
         # Getting Image and Location Embeddings (with same dimension)
-        # image_embeddings: torch.Size([8, 1024, 256]) = batch_size x channel x contrastive_dimension
         image_embeddings = self.image_projection(image_features)
         location_embeddings = self.location_projection(location_features)
+        # image_embeddings shape: (batch_size, channel, contrastive_dimension) = [8, 1024, 256]
+        # location_embeddings shape: (batch_size, contrastive_dimension) = [8, 256]
 
         # Normalize embeddings
         image_embeddings = F.normalize(image_embeddings, p=2, dim=-1)
         location_embeddings = F.normalize(location_embeddings, p=2, dim=-1)
+        # image_embeddings shape: (batch_size, channel, contrastive_dimension) = [8, 1024, 256]
+        # location_embeddings shape: (batch_size, contrastive_dimension) = [8, 256]
+
+        image_embeddings = image_embeddings.permute(1, 0, 2)
+        # image_embeddings shape: (channel, batch_size, contrastive_dimension) = [1024, 8, 256]
+        location_embeddings = location_embeddings.T.unsqueeze(0) #[1, 256, 8]
+        location_embeddings = location_embeddings.expand(image_embeddings.size(0), -1, -1) #[1024, 256, 8]
+
+        # do the dot product in batch
+        results = torch.bmm(image_embeddings, location_embeddings) 
+        logits = results.mean(dim=0)/CFG.temperature # (batch_size * batch_size) = [8, 8]
 
         # Calculating the Loss
-        logits = image_embeddings @ location_embeddings.T / CFG.temperature
         labels = torch.arange(logits.size(0)).long().to(logits.device)
 
         img_to_text_loss = F.cross_entropy(logits, labels)
@@ -55,11 +67,3 @@ class CPIPModel(nn.Module):
         loss = (img_to_text_loss + text_to_img_loss) / 2
 
         return loss, logits
-
-if __name__ == "__main__":
-    model = CPIPModel().to(CFG.device)
-    test_input = {
-        "image": torch.randn(8, 3, 1440, 810).to(CFG.device),
-        "location": torch.randn(8, 3, 1440, 810).to(CFG.device),
-    }
-    loss, logits = model(test_input)

@@ -8,7 +8,7 @@ num_workers = 0
 epochs = 150
 warmup_epochs = 5
 resume_training = True
-process_data = False # Set to False if already have stored vector
+process_data = True # Set to False if already have stored vector
 
 # ==========================
 # Model Parameters
@@ -48,8 +48,8 @@ target_img_height = 320 # same as above
 # ==========================
 # Image Encoder Configuration
 # ==========================
-encoder_output_height = round(img_height / 16)
-encoder_output_width = round(img_width / 16)
+encoder_output_height = round(target_img_width / 16)
+encoder_output_width = round(target_img_width / 16)
 image_embedding_dim = encoder_output_height * encoder_output_width
 channel = 1024
 
