@@ -8,7 +8,7 @@ import pandas as pd
 import torch
 from CPIP import CPIPModel
 from tqdm import tqdm
-from cpip_train import prepare_data, build_loaders, train_epoch, valid_epoch, calculate_metrics, train
+from cpip_utils import prepare_data, build_loaders, train_epoch, valid_epoch, calculate_metrics
 from modules import MixVPRModel, ShallowConvNet
 from vpr import do_vpr, get_vpr_descriptors, vpr_recall, compute_topk_match_vector
 
@@ -72,15 +72,15 @@ def get_mixvpr_model():
         miner_margin=0.1
     )
     
-    state_dict = torch.load(CFG.mixvpr_checkpoint_name)
+    state_dict = torch.load(CFG.mixvpr_checkpoint_path)
     model.load_state_dict(state_dict)
     model.eval()
     return model
 
-def get_cpip_model():
+def get_cpip_model(checkpoint_path):
     model = CPIPModel().to(CFG.device)
-    if os.path.exists(CFG.cpip_checkpoint_path):
-        model.load_state_dict(torch.load(CFG.cpip_checkpoint_path))
+    if os.path.exists(checkpoint_path):
+        model.load_state_dict(torch.load(checkpoint_path))
     else:
         print("WARNING: No weights for CPIP model")
         
@@ -97,7 +97,7 @@ def load_or_generate_dataframes(mixvpr_model, data_path):
     database_df_path = os.path.join(data_path, "database_df.pkl")
     query_df_path = os.path.join(data_path, "query_df.pkl")
     
-    if CFG.process_data:
+    if not (os.path.isfile(database_df_path) and os.path.isfile(query_df_path)):
         database_df = process_vectors(mixvpr_model, data_path + "/database", database_df_path, "Database")
         query_df = process_vectors(mixvpr_model, data_path + "/query", query_df_path, "Query")
         database_df.to_pickle(database_df_path)
@@ -186,11 +186,11 @@ def get_location_descriptors(mixvpr_agg, cpip_model, locations):
         return combined_data
     
 
-def main(data_path):
+def main(data_path, cpip_checkpoint_path=CFG.cpip_checkpoint_path):
     print("Starting the pipeline...")
     
     mixvpr_model = get_mixvpr_model()
-    cpip_model = get_cpip_model()
+    cpip_model = get_cpip_model(cpip_checkpoint_path)
     
     print("Obtaining database and query vectors")
     # Obtain database and query vectors
@@ -198,7 +198,7 @@ def main(data_path):
     
     # Convert the list of numpy arrays in db_df['descriptors'] into a 2D numpy array
     database_vectors = np.stack(db_df['descriptors'].values)
-    
+
     # Initialize lists to collect results
     all_synthetic_query_avg_positions = []
     all_distances_synthetic = []
@@ -249,18 +249,28 @@ def main(data_path):
         all_distances_mixvpr_best_match.extend(distance_mixvpr_best_match)
 
     # Aggregate results
-    print("Average distance to synthetic descriptors:", np.mean(all_distances_synthetic))
-    print("Minimum distance to synthetic descriptors:", np.min(all_distances_synthetic))
-    print("Maximum distance to synthetic descriptors:", np.max(all_distances_synthetic))
-    print("Average distance to MixVPR's best match:", np.mean(all_distances_mixvpr_best_match))
-    print("Minimum distance to MixVPR's best match:", np.min(all_distances_mixvpr_best_match))
-    print("Maximum distance to MixVPR's best match:", np.max(all_distances_mixvpr_best_match))
-    
+    avg_dist_synthetic = np.mean(all_distances_synthetic)
+    min_dist_synthetic = np.min(all_distances_synthetic)
+    max_dist_synthetic = np.max(all_distances_synthetic)
+    avg_dist_mixvpr_best = np.mean(all_distances_mixvpr_best_match)
+    min_dist_mixvpr_best = np.min(all_distances_mixvpr_best_match)
+    max_dist_mixvpr_best = np.max(all_distances_mixvpr_best_match)
+
+    print("Average distance to synthetic descriptors:", avg_dist_synthetic)
+    print("Minimum distance to synthetic descriptors:", min_dist_synthetic)
+    print("Maximum distance to synthetic descriptors:", max_dist_synthetic)
+    print("Average distance to MixVPR's best match:", avg_dist_mixvpr_best)
+    print("Minimum distance to MixVPR's best match:", min_dist_mixvpr_best)
+    print("Maximum distance to MixVPR's best match:", max_dist_mixvpr_best)
+
+    return (avg_dist_synthetic, min_dist_synthetic, max_dist_synthetic), (avg_dist_mixvpr_best, min_dist_mixvpr_best, max_dist_mixvpr_best)
+
 def parse_args():
     parser = argparse.ArgumentParser(description="Run the VPR pipeline.")
     parser.add_argument('--data_path', type=str, required=True, help='Path to the data.')
+    parser.add_argument('--cpip_checkpoint_path', type=str, required=False, help='Optional checkpoint path for CPIP.')
     return parser.parse_args()
 
-if __name__=="__main__":
+if __name__ == "__main__":
     args = parse_args()
-    main(data_path=args.data_path)
+    main(data_path=args.data_path, cpip_checkpoint_path=args.cpip_checkpoint_path)

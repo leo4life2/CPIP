@@ -2,6 +2,7 @@ import json
 import os
 import csv
 import re
+import argparse
 
 import config as CFG 
 import pandas as pd
@@ -13,7 +14,8 @@ from dataset import CPIPDataset, get_transforms
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import precision_score, recall_score, f1_score
 from tqdm import tqdm
-from cpip_utils import AvgMeter, get_lr
+from cpip_utils import AvgMeter, get_lr, prepare_data, build_loaders, train_epoch, valid_epoch, calculate_metrics
+from pipeline import main
 import pdb
 import ssl
 
@@ -22,123 +24,6 @@ ssl._create_default_https_context = ssl._create_unverified_context  # workaround
 USER = os.environ.get("USER")
 os.environ['TORCH_HOME'] = f'/scratch/{USER}/pytorch'
 
-def prepare_data(data_path):
-    # List all .png files in the directory
-    image_files = sorted([f for f in os.listdir(data_path) if f.endswith(".png")])
-
-    # Prepare data
-    data = []
-    for image_file in image_files:
-        full_image_path = os.path.join(data_path, image_file)
-        json_file = image_file.replace(".png", ".json")
-        json_path = os.path.join(data_path, json_file)
-
-        with open(json_path, "r") as f:
-            json_data = json.load(f)
-
-        location = json_data["locations"][0]
-        yaw = int(re.search(r"yaw(\d+)", image_file).group(1))
-        location.append(yaw)
-
-        data.append({"image": full_image_path, "location": location})
-
-    # Convert to DataFrame for easy handling
-    df = pd.DataFrame(data)
-    return df
-
-def calculate_metrics(logits, labels):
-    _, predicted = torch.max(logits, 1)
-    correct = (predicted == labels).sum().item()
-    total = labels.size(0)
-    accuracy = correct / total
-    precision = precision_score(labels.cpu(), predicted.cpu(), average='macro', zero_division=0)
-    recall = recall_score(labels.cpu(), predicted.cpu(), average='macro', zero_division=0)
-    f1 = f1_score(labels.cpu(), predicted.cpu(), average='macro', zero_division=0)
-    return accuracy, precision, recall, f1
-
-def build_loaders(dataframe, mode):
-    dataset = CPIPDataset(dataframe)
-    dataloader = torch.utils.data.DataLoader(
-        dataset,
-        batch_size=CFG.batch_size,
-        num_workers=CFG.num_workers,
-        shuffle=True if mode == "train" else False,
-    )
-    return dataloader
-
-def train_epoch(model, train_loader, optimizer, lr_scheduler, step, writer, epoch):
-    model.train()
-    loss_meter = AvgMeter()
-    accuracy_meter = AvgMeter()
-    precision_meter = AvgMeter()
-    recall_meter = AvgMeter()
-    f1_meter = AvgMeter()
-    tqdm_object = tqdm(train_loader, total=len(train_loader))
-
-    for batch in tqdm_object:
-        batch = {k: v.to(CFG.device) for k, v in batch.items() if k != "caption"}
-        optimizer.zero_grad()
-        loss, logits = model(batch)
-        labels = torch.arange(logits.size(0)).long().to(logits.device)
-        accuracy, precision, recall, f1 = calculate_metrics(logits, labels)
-
-        loss.backward()
-        optimizer.step()
-
-        if step == "batch":
-            lr_scheduler.step()
-
-        count = batch["image"].size(0)
-        loss_meter.update(loss.item(), count)
-        accuracy_meter.update(accuracy, count)
-        precision_meter.update(precision, count)
-        recall_meter.update(recall, count)
-        f1_meter.update(f1, count)
-
-        tqdm_object.set_postfix(train_loss=loss_meter.avg, train_accuracy=accuracy_meter.avg, lr=get_lr(optimizer))
-
-    writer.add_scalar('Loss/train', loss_meter.avg, epoch)
-    writer.add_scalar('Accuracy/train', accuracy_meter.avg, epoch)
-    writer.add_scalar('Precision/train', precision_meter.avg, epoch)
-    writer.add_scalar('Recall/train', recall_meter.avg, epoch)
-    writer.add_scalar('F1/train', f1_meter.avg, epoch)
-    writer.add_scalar('Learning Rate', get_lr(optimizer), epoch)
-
-    return loss_meter.avg, accuracy_meter.avg
-
-def valid_epoch(model, valid_loader, writer, epoch):
-    model.eval()
-    loss_meter = AvgMeter()
-    accuracy_meter = AvgMeter()
-    precision_meter = AvgMeter()
-    recall_meter = AvgMeter()
-    f1_meter = AvgMeter()
-    tqdm_object = tqdm(valid_loader, total=len(valid_loader))
-
-    with torch.no_grad():
-        for batch in tqdm_object:
-            batch = {k: v.to(CFG.device) for k, v in batch.items() if k != "caption"}
-            loss, logits = model(batch)
-            labels = torch.arange(logits.size(0)).long().to(logits.device)
-            accuracy, precision, recall, f1 = calculate_metrics(logits, labels)
-
-            count = batch["image"].size(0)
-            loss_meter.update(loss.item(), count)
-            accuracy_meter.update(accuracy, count)
-            precision_meter.update(precision, count)
-            recall_meter.update(recall, count)
-            f1_meter.update(f1, count)
-
-            tqdm_object.set_postfix(valid_loss=loss_meter.avg, valid_accuracy=accuracy_meter.avg)
-
-    writer.add_scalar('Loss/valid', loss_meter.avg, epoch)
-    writer.add_scalar('Accuracy/valid', accuracy_meter.avg, epoch)
-    writer.add_scalar('Precision/valid', precision_meter.avg, epoch)
-    writer.add_scalar('Recall/valid', recall_meter.avg, epoch)
-    writer.add_scalar('F1/valid', f1_meter.avg, epoch)
-
-    return loss_meter.avg, accuracy_meter.avg
-
 def train(data_path):
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     writer = SummaryWriter(log_dir=f"tensorboard/cpip_{timestamp}")
@@ -146,7 +31,7 @@ def train(data_path):
     # Define hyperparameters to log
     hparams = {key: value for key, value in vars(CFG).items() if not key.startswith('__')}
 
-    data_df = prepare_data(data_path)
+    data_df = prepare_data(data_path + "/database")
     # Split into train and validation sets
     train_df, valid_df = train_test_split(
         data_df, test_size=0.2, random_state=42, shuffle=True
@@ -157,9 +42,9 @@ def train(data_path):
 
     model = CPIPModel().to(CFG.device)
 
-    if os.path.exists(CFG.cpip_checkpoint_name) and CFG.resume_training:
-        model.load_state_dict(torch.load(best_model_path))
-        print(f"Loaded model weights from {CFG.cpip_checkpoint_name} and resuming training...")
+    if os.path.exists(CFG.cpip_checkpoint_path) and CFG.resume_training:
+        model.load_state_dict(torch.load(CFG.cpip_checkpoint_path))
+        print(f"Loaded model weights from {CFG.cpip_checkpoint_path} and resuming training...")
 
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=CFG.lr, weight_decay=CFG.weight_decay
@@ -177,9 +62,23 @@ def train(data_path):
         'train_accuracy': 0,
         'valid_accuracy': 0,
     }
+    
+    last_checkpoint_name = CFG.cpip_checkpoint_path if CFG.cpip_checkpoint_path != "" else None
 
     for epoch in range(CFG.epochs):
         print(f"Epoch: {epoch + 1}")
+        
+        if epoch % CFG.vpr_validation_epochs == 0 and last_checkpoint_name: # VPR validation
+            print("Performing VPR Validation")
+            (avg_dist_synthetic, min_dist_synthetic, max_dist_synthetic), (avg_dist_mixvpr_best, min_dist_mixvpr_best, max_dist_mixvpr_best) = main(data_path, cpip_checkpoint_path=last_checkpoint_name)
+            
+            writer.add_scalar('VPR/avg_dist_synthetic', avg_dist_synthetic, epoch)
+            writer.add_scalar('VPR/min_dist_synthetic', min_dist_synthetic, epoch) 
+            writer.add_scalar('VPR/max_dist_synthetic', max_dist_synthetic, epoch)
+            writer.add_scalar('VPR/avg_dist_mixvpr_best', avg_dist_mixvpr_best, epoch)
+            writer.add_scalar('VPR/min_dist_mixvpr_best', min_dist_mixvpr_best, epoch)
+            writer.add_scalar('VPR/max_dist_mixvpr_best', max_dist_mixvpr_best, epoch)
+            
 
         train_loss, train_accuracy = train_epoch(model, train_loader, optimizer, lr_scheduler, step, writer, epoch)
         valid_loss, valid_accuracy = valid_epoch(model, valid_loader, writer, epoch)
@@ -198,14 +97,21 @@ def train(data_path):
         if valid_loss < best_loss:
             best_loss = valid_loss
             metrics['best_loss'] = best_loss
-            torch.save(model.state_dict(), "best.pt")
-            print("Saved Best Model!")
+            timestamp = datetime.now().strftime("%m%d%H%M")  
+            last_checkpoint_name = f"cpip_{valid_accuracy:.1f}_{timestamp}.pt"
+            torch.save(model.state_dict(), last_checkpoint_name)
+            print(f"Saved Best Model as {last_checkpoint_name}!")
 
     # Log hyperparameters and final metrics
     writer.add_hparams(hparam_dict=hparams, metric_dict=metrics)
 
     writer.close()
+    
+def parse_args():
+    parser = argparse.ArgumentParser(description="Run the VPR pipeline.")
+    parser.add_argument('--data_path', type=str, required=True, help='Path to the data.')
+    return parser.parse_args()
 
 if __name__ == "__main__":
-    data_path = "/scratch/zl3493/UNav-Dataset/810p/raw/000/database"
-    train(data_path)
+    args = parse_args()
+    train(data_path=args.data_path)

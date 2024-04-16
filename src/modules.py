@@ -158,8 +158,8 @@ class ProjectionHead(nn.Module):
 class ImageProjectionHead(ProjectionHead):
     def __init__(
         self, 
-        embedding_dim, 
-        projection_dim=256, 
+        embedding_dim = CFG.image_embedding_dim, 
+        projection_dim=CFG.contrastive_dimension, 
         dropout=0.1, 
         num_blocks=1
     ):
@@ -167,7 +167,7 @@ class ImageProjectionHead(ProjectionHead):
     
     def forward(self, x):
         batch_size, channels, features = x.shape
-        x = x.view(batch_size * channels, features)
+        x = x.view(batch_size * channels, features) #[8192, 400]
         x = super().forward(x)
         x = x.view(batch_size, channels, -1)
         return x
