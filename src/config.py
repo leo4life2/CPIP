@@ -8,14 +8,14 @@ num_workers = 0
 epochs = 150
 warmup_epochs = 5
 resume_training = True
-process_data = True # Set to False if already have stored vector
+vpr_validation_epochs = 3 # run VPR pipeline after this number of epochs
 
 # ==========================
 # Model Parameters
 # ==========================
-cpip_checkpoint_path = ""
-image_encoder_model_name = 'resnet50'
-mixvpr_checkpoint_name = "resnet50_MixVPR_4096_channels(1024)_rows(4).ckpt"
+cpip_checkpoint_path = "/scratch/zl3493/dummy.pt"
+image_encoder_model_name = "resnet50"
+mixvpr_checkpoint_path = "/scratch/zl3493/CPIP/resnet50_MixVPR_4096_channels(1024)_rows(4).ckpt"
 
 # Image Embedding Configuration
 # image_embedding = 1024 # for vit_large_patch14_dinov2
@@ -39,8 +39,8 @@ temperature = 1.0
 # unav images are 1440 x 810
 #img_width = 518 # for vit_large_patch14_dinov2
 #img_height = 518 # for vit_large_patch14_dinov2
-img_width = 1440
-img_height = 810
+img_width = 960
+img_height = 540
 
 target_img_width = 320 # for mixvpr pretrained weights
 target_img_height = 320 # same as above
@@ -71,10 +71,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # VPR Configuration
 # ==========================
 vpr_threshold = 0.5
-top_k = 5
+top_k = 1
+# top_k = 5
 
 # Hyperparameters for grid generation
-grid_spacing = 0.01  # distance between points
-grid_extent = 1     # number of points to generate in each direction (left, right, up, down)
+grid_spacing = 1  # distance between points
+grid_extent = 4     # number of points to generate in each direction (left, right, up, down)
 
-num_rotation_steps = 2  # Number of rotations to cover 360 degrees for synthesizing position descriptors
+num_rotation_steps = 6  # Number of rotations to cover 360 degrees for synthesizing position descriptors

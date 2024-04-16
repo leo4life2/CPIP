@@ -27,36 +27,27 @@ class CPIPModel(nn.Module):
 
     def forward(self, batch):
         # Getting Image Features
-        image_features = self.image_encoder(batch["image"])
-        # batch[image] shape:  (batch_size, 3, target_img_width, target_img_height) = [8, 3, 320, 320]
-        # image_features shape: (batch_size, channels, encoder_output_height, encoder_output_width) = [8, 1024, 20, 20]
-
-        image_features = image_features.view(CFG.batch_size, CFG.channel, -1)
-        # image_features shape: (batch_size, channels, encoder_output_height * encoder_output_width) = [8, 1024, 400]
-
-        location_features = batch["location"]
-        # batch[location] shape:  (batch_size, 3) = [8, 3]
+        # batch[image] shape:  (batch_size, 3, target_img_width, target_img_height) = [8, 3, 320, 320] / [batchsize, channels, target_img_width, target_img_height]
+        image_features = self.image_encoder(batch["image"]) # shape: (batch_size, channels, encoder_output_height, encoder_output_width) = [8, 1024, 20, 20]
+        batch_size, channels, encoder_output_height, encoder_output_width = image_features.shape
+        image_features = image_features.view(batch_size, channels, encoder_output_height * encoder_output_width)
+        location_features = batch["location"] # shape:  (batch_size, 3) = [8, 3]
 
         # Getting Image and Location Embeddings (with same dimension)
-        image_embeddings = self.image_projection(image_features)
-        location_embeddings = self.location_projection(location_features)
-        # image_embeddings shape: (batch_size, channel, contrastive_dimension) = [8, 1024, 256]
-        # location_embeddings shape: (batch_size, contrastive_dimension) = [8, 256]
+        image_embeddings = self.image_projection(image_features) # shape: (batch_size, channels, contrastive_dimension) = [8, 1024, 256]
+        location_embeddings = self.location_projection(location_features) # shape: (batch_size, contrastive_dimension) = [8, 256]
 
         # Normalize embeddings
         image_embeddings = F.normalize(image_embeddings, p=2, dim=-1)
         location_embeddings = F.normalize(location_embeddings, p=2, dim=-1)
-        # image_embeddings shape: (batch_size, channel, contrastive_dimension) = [8, 1024, 256]
-        # location_embeddings shape: (batch_size, contrastive_dimension) = [8, 256]
 
-        image_embeddings = image_embeddings.permute(1, 0, 2)
-        # image_embeddings shape: (channel, batch_size, contrastive_dimension) = [1024, 8, 256]
+        image_embeddings = image_embeddings.permute(1, 0, 2) # shape: (channels, batch_size, contrastive_dimension) = [1024, 8, 256]
         location_embeddings = location_embeddings.T.unsqueeze(0) #[1, 256, 8]
-        location_embeddings = location_embeddings.expand(image_embeddings.size(0), -1, -1) #[1024, 256, 8]
+        location_embeddings = location_embeddings.expand(image_embeddings.size(0), -1, -1) # [1024, 256, 8]
 
         # do the dot product in batch
         results = torch.bmm(image_embeddings, location_embeddings) 
-        logits = results.mean(dim=0)/CFG.temperature # (batch_size * batch_size) = [8, 8]
+        logits = results.mean(dim=0) / CFG.temperature # (batch_size * batch_size) = [8, 8]
 
         # Calculating the Loss
         labels = torch.arange(logits.size(0)).long().to(logits.device)
