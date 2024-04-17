@@ -11,12 +11,22 @@ class ShallowConvNet(nn.Module):
     def __init__(self, input_c, input_h, input_w, output_c, output_h, output_w):
         super(ShallowConvNet, self).__init__()
         self.conv1 = nn.Conv2d(input_c, output_c, kernel_size=3, padding=1)
-        self.adaptive_pool = nn.AdaptiveAvgPool2d((output_h, output_w))
+        self.adaptive_pool = nn.AdaptiveMaxPool2d((output_h, output_w))
 
     def forward(self, x):
         x = self.conv1(x)
         x = self.adaptive_pool(x)
         return x
+
+# A new class for dot product model
+class DotProductModel(nn.Module):
+    def __init__(self, input_dim, output_dim):
+        super(DotProductModel, self).__init__()
+        self.matrix = nn.Parameter(torch.randn(input_dim, output_dim))
+
+    def forward(self, x):
+        return torch.matmul(x, self.matrix)
+
 
 
 class MixVPRModel(nn.Module):
