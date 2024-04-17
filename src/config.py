@@ -13,7 +13,7 @@ vpr_validation_epochs = 3 # run VPR pipeline after this number of epochs
 # ==========================
 # Model Parameters
 # ==========================
-cpip_checkpoint_path = "/scratch/zl3493/dummy.pt"
+cpip_checkpoint_path = "/scratch/zl3493/CPIP/cpip_0.3_04160259.pt"
 image_encoder_model_name = "resnet50"
 mixvpr_checkpoint_path = "/scratch/zl3493/CPIP/resnet50_MixVPR_4096_channels(1024)_rows(4).ckpt"
 
@@ -75,7 +75,9 @@ top_k = 1
 # top_k = 5
 
 # Hyperparameters for grid generation
-grid_spacing = 1  # distance between points
 grid_extent = 4     # number of points to generate in each direction (left, right, up, down)
+grid_side_length_percentage = 0.1  # Percentage of average closest distance to use for grid side length
 
 num_rotation_steps = 6  # Number of rotations to cover 360 degrees for synthesizing position descriptors
+# Maximum degree of rotation
+max_rotation_degrees = 18 # e.g. for yaw datasets, this might be 18, for ICT datasets, this would be 360
