@@ -11,7 +11,7 @@ class ShallowConvNet(nn.Module):
     def __init__(self, input_c, input_h, input_w, output_c, output_h, output_w):
         super(ShallowConvNet, self).__init__()
         self.conv1 = nn.Conv2d(input_c, output_c, kernel_size=3, padding=1)
-        self.adaptive_pool = nn.AdaptiveMaxPool2d((output_h, output_w))
+        self.adaptive_pool = nn.AdaptiveAvgPool2d((output_h, output_w))
 
     def forward(self, x):
         x = self.conv1(x)

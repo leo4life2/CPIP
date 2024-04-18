@@ -188,7 +188,6 @@ def get_location_descriptors(mixvpr_agg, cpip_model, locations):
             
             descriptors = cnn_model(reshaped_locations) 
             # descriptors: [12000, 1024, 20, 20]
-            pdb.set_trace()
 
             synthetic_descriptors = mixvpr_agg(descriptors) # Shape: (b * num_points, out_rows * out_channels)
             # at this point, (800, 1, 16, 16) takes about 20gb vram. 

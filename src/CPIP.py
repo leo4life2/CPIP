@@ -28,7 +28,12 @@ class CPIPModel(nn.Module):
                                   input_h = int(CFG.contrastive_dimension ** 0.5),
                                   input_w = int(CFG.contrastive_dimension ** 0.5),
                                   output_c = 1024, output_h = 20, output_w = 20)
-        self.dotproduct = DotProductModel(input_dim = 1024*20*20, output_dim = CFG.contrastive_dimension)
+        self.dotproduct = ProjectionHead(
+            embedding_dim=1024*20*20,
+            projection_dim=CFG.contrastive_dimension,
+            dropout=CFG.projection_dropout,
+            num_blocks=CFG.location_projection_blocks,
+        )
 
     def forward(self, batch):
         # Getting Image Features
@@ -54,6 +59,7 @@ class CPIPModel(nn.Module):
 
         # use dot product (a matrxi) to scale back to (batch_size, contrastive_dimension) = [8, 256]
         location_embeddings = self.dotproduct(location_descriptors) 
+        print(location_embeddings.shape)
         # ==================================================
 
         # Normalize embeddings
