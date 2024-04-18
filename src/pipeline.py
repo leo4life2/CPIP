@@ -162,7 +162,6 @@ def generate_grid(locations):
 def get_location_descriptors(mixvpr_agg, cpip_model, locations):
     location_encoder = cpip_model.location_projection
     cnn_model = cpip_model.cnn
-    dotproduct_model = cpip_model.dotproduct
 
     combined_data_batches = []
     batch_size = 25
