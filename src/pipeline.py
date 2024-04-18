@@ -242,7 +242,7 @@ def main(data_path, cpip_checkpoint_path=CFG.cpip_checkpoint_path):
 
     # Process in batches of 5 query vectors
     num_queries = len(query_df)
-    batch_size = 5
+    batch_size = CFG.vpr_batch_size
     for start_idx in tqdm(range(0, num_queries, batch_size), desc="Processing query batches"):
         end_idx = min(start_idx + batch_size, num_queries)
         query_vectors_batch = np.stack(query_df['descriptors'].values[start_idx:end_idx])

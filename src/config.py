@@ -4,6 +4,7 @@ import torch
 # Training Setup
 # ==========================
 batch_size = 8
+vpr_batch_size = 10
 num_workers = 0
 epochs = 150
 warmup_epochs = 5
@@ -13,7 +14,7 @@ vpr_validation_epochs = 3 # run VPR pipeline after this number of epochs
 # ==========================
 # Model Parameters
 # ==========================
-cpip_checkpoint_path = "/scratch/zl3493/CPIP/cpip_0.3_04160259.pt"
+cpip_checkpoint_path = "/scratch/zl3493/CPIP/cpip_val0.3_20240417_190436.pt"
 image_encoder_model_name = "resnet50"
 mixvpr_checkpoint_path = "/scratch/zl3493/CPIP/resnet50_MixVPR_4096_channels(1024)_rows(4).ckpt"
 
