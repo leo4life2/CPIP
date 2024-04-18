@@ -17,7 +17,7 @@ def options():
     parser.add_argument('-f', '--fov', type=int, default=90)
     parser.add_argument('-y', '--yaw_num', type=int, default=18)
     parser.add_argument('-t', '--height', type=int, default=810)
-    parser.add_argument('-w', '--width', type=int, default=1440)
+    parser.add_argument('-w', '--width', type=int, default=1440) # if 360deg image, divide width by (360/fov). not always 1440x810.
     parser.add_argument('-v', '--video', type=str, default='ICT1_0')
     opt = parser.parse_args()
     return opt

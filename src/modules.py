@@ -166,10 +166,10 @@ class ImageProjectionHead(ProjectionHead):
         super().__init__(embedding_dim, projection_dim, dropout, num_blocks)
     
     def forward(self, x):
-        batch_size, channels, features = x.shape
-        x = x.view(batch_size * channels, features) #[8192, 400]
+        batch_size, channels, features = x.shape # [8, 1024, 400]
+        x = x.view(batch_size * channels, features) # [8192, 400]
         x = super().forward(x)
-        x = x.view(batch_size, channels, -1)
+        x = x.view(batch_size, channels, -1) # [8, 1024, 400]
         return x
 
 

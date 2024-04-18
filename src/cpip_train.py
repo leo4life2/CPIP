@@ -63,7 +63,7 @@ def train(data_path):
         'valid_accuracy': 0,
     }
     
-    last_checkpoint_name = CFG.cpip_checkpoint_path if CFG.cpip_checkpoint_path != "" else None
+    last_checkpoint_name = CFG.cpip_checkpoint_path if CFG.cpip_checkpoint_path != "" and os.path.isfile(CFG.cpip_checkpoint_path) else None
 
     for epoch in range(CFG.epochs):
         print(f"Epoch: {epoch + 1}")
@@ -97,8 +97,7 @@ def train(data_path):
         if valid_loss < best_loss:
             best_loss = valid_loss
             metrics['best_loss'] = best_loss
-            timestamp = datetime.now().strftime("%m%d%H%M")  
-            last_checkpoint_name = f"cpip_{valid_accuracy:.1f}_{timestamp}.pt"
+            last_checkpoint_name = f"cpip_val{valid_accuracy:.1f}_{timestamp}.pt"
             torch.save(model.state_dict(), last_checkpoint_name)
             print(f"Saved Best Model as {last_checkpoint_name}!")
 

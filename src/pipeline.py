@@ -19,6 +19,37 @@ def get_mixvpr_descriptors_for_dir(model, image_path, save_path):
     df['descriptors'] = list(vectors)
     return df
 
+def calculate_average_closest_distance(database_df, sample_percentage):
+    # Extract 2D coordinates, ignoring the last element of each array in the 'location' column
+    coordinates = np.array([loc[:2] for loc in database_df['location']])
+    
+    # Determine the number of samples to take
+    sample_size = int(len(coordinates) * sample_percentage)
+    
+    # Randomly sample indices from the coordinates array
+    sample_indices = np.random.choice(len(coordinates), size=sample_size, replace=False)
+    sampled_coordinates = coordinates[sample_indices]
+    
+    # Initialize a list to store the minimum distances for each sampled point
+    min_distances = []
+    
+    # Compute the closest neighbor distance for each point in the sample
+    for sample in sampled_coordinates:
+        # Compute distances from the current sample to all points in the dataset
+        distances = np.sqrt(np.sum((coordinates - sample) ** 2, axis=1))
+        
+        # The closest distance is the minimum of these distances, excluding the distance to itself (which is zero)
+        # We sort and pick the second smallest since the smallest will be zero (distance to itself)
+        closest_distance = np.partition(distances, 1)[1]
+        
+        # Append the closest distance found to the list
+        min_distances.append(closest_distance)
+    
+    # Calculate the average of the minimum distances
+    average_distance = np.mean(min_distances)
+    
+    return average_distance
+
 # Do similarity search in {D_f} with D_q, getting top K descriptors {D_a}. 
 def do_similarity_search(database_vectors, query_vectors, k=5, batch=False):
     return compute_topk_match_vector(query_vectors, database_vectors, k=k)
@@ -108,7 +139,7 @@ def load_or_generate_dataframes(mixvpr_model, data_path):
     
     return database_df, query_df
 
-def generate_grid(locations):
+def generate_grid(locations, grid_spacing):
     """
     Generates a grid of points around each location, excluding the center point in the horizontal and vertical range,
     and includes diagonal points. Additionally, it generates multiple rotation steps for each grid point.
@@ -138,14 +169,14 @@ def generate_grid(locations):
     grid_y_flat = grid_y_flat[center_mask]
     
     # Calculate grid points
-    grid_points_x = x_center[:, None] + grid_x_flat * CFG.grid_spacing
-    grid_points_y = y_center[:, None] + grid_y_flat * CFG.grid_spacing
+    grid_points_x = x_center[:, None] + grid_x_flat * grid_spacing
+    grid_points_y = y_center[:, None] + grid_y_flat * grid_spacing
     
     # Combine x and y coordinates for grid points
     grid_points = torch.stack((grid_points_x, grid_points_y), dim=2)
     
     # Generate rotation steps
-    theta_steps = torch.linspace(0, 2 * math.pi, CFG.num_rotation_steps + 1, device=locations.device)[:-1]  # Exclude the last point to avoid duplication of 0 and 2*pi
+    theta_steps = torch.linspace(0, CFG.max_rotation_degrees, CFG.num_rotation_steps + 1, device=locations.device)[:-1]  # Exclude the last point to avoid duplication of 0 and 2*pi
     theta_steps = theta_steps.expand(grid_points.size(0), grid_points.size(1), CFG.num_rotation_steps)
     
     # Repeat grid points for each rotation step
@@ -198,6 +229,11 @@ def main(data_path, cpip_checkpoint_path=CFG.cpip_checkpoint_path):
     
     # Convert the list of numpy arrays in db_df['descriptors'] into a 2D numpy array
     database_vectors = np.stack(db_df['descriptors'].values)
+    
+    # Compute grid spacing
+    avg_closest_dist = calculate_average_closest_distance(db_df, sample_percentage=1.0)
+    grid_side_length = CFG.grid_side_length_percentage * avg_closest_dist
+    grid_spacing = grid_side_length / (2 * CFG.grid_extent + 1)
 
     # Initialize lists to collect results
     all_synthetic_query_avg_positions = []
@@ -206,7 +242,7 @@ def main(data_path, cpip_checkpoint_path=CFG.cpip_checkpoint_path):
 
     # Process in batches of 5 query vectors
     num_queries = len(query_df)
-    batch_size = 50
+    batch_size = CFG.vpr_batch_size
     for start_idx in tqdm(range(0, num_queries, batch_size), desc="Processing query batches"):
         end_idx = min(start_idx + batch_size, num_queries)
         query_vectors_batch = np.stack(query_df['descriptors'].values[start_idx:end_idx])
@@ -214,9 +250,9 @@ def main(data_path, cpip_checkpoint_path=CFG.cpip_checkpoint_path):
         # Get top k closest descriptors {D_d} for all input D_q in the batch
         matched_indices = do_similarity_search(database_vectors, query_vectors_batch, k=CFG.top_k)
         # Get P_d for all {D_d}
-        query_average_positions = get_average_position(db_df, matched_indices)
+        mixvpr_average_positions = get_average_position(db_df, matched_indices)
         # Get grid points for all P_d
-        grid_points = generate_grid(query_average_positions)
+        grid_points = generate_grid(mixvpr_average_positions, grid_spacing)
         
         # Generate synthetic descriptors for all locations
         synthetic_data = get_location_descriptors(mixvpr_model.aggregator, cpip_model, grid_points)
@@ -240,8 +276,11 @@ def main(data_path, cpip_checkpoint_path=CFG.cpip_checkpoint_path):
         query_positions_batch = query_df['location'].values[start_idx:end_idx]
         query_positions_batch = np.array([np.array(pos) for pos in query_positions_batch])
         
-        distance_synthetic = np.linalg.norm(query_positions_batch - synthetic_query_avg_positions, axis=1)
-        distance_mixvpr_best_match = np.linalg.norm(query_positions_batch - query_average_positions, axis=1)
+        query_positions_2d = query_positions_batch[:, :2]
+        mixvpr_avg_positions_2d = mixvpr_average_positions[:, :2]
+        synthetic_avg_positions_2d = synthetic_query_avg_positions[:, :2]
+        distance_synthetic = np.linalg.norm(query_positions_2d - synthetic_avg_positions_2d, axis=1)
+        distance_mixvpr_best_match = np.linalg.norm(query_positions_2d - mixvpr_avg_positions_2d, axis=1)
         
         # Collect results
         all_synthetic_query_avg_positions.append(synthetic_query_avg_positions)
@@ -268,7 +307,7 @@ def main(data_path, cpip_checkpoint_path=CFG.cpip_checkpoint_path):
 def parse_args():
     parser = argparse.ArgumentParser(description="Run the VPR pipeline.")
     parser.add_argument('--data_path', type=str, required=True, help='Path to the data.')
-    parser.add_argument('--cpip_checkpoint_path', type=str, required=False, help='Optional checkpoint path for CPIP.')
+    parser.add_argument('--cpip_checkpoint_path', type=str, default=CFG.cpip_checkpoint_path, help='Optional checkpoint path for CPIP. Defaults to the path in config.')
     return parser.parse_args()
 
 if __name__ == "__main__":
