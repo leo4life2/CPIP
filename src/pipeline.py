@@ -194,6 +194,7 @@ def generate_grid(locations, grid_spacing):
 
 def get_location_descriptors(mixvpr_agg, cpip_model, locations):
     location_encoder = cpip_model.location_projection
+    cnn_model = cpip_model.cnn
     with torch.no_grad():
         encoded_locations = location_encoder(locations)  # Encode all location vectors
         # let num_points = ((2*CFG.grid_extent+1)**2 - 1) * CFG.num_rotation_steps,
@@ -204,13 +205,8 @@ def get_location_descriptors(mixvpr_agg, cpip_model, locations):
         b, num_points, _ = encoded_locations.shape
         dimension_size = int(CFG.contrastive_dimension**0.5)
         reshaped_locations = encoded_locations.view(b * num_points, 1, dimension_size, dimension_size)
-
-        # Create and apply CNN model
-        cnn_model = ShallowConvNet(input_c=1, input_h=dimension_size, input_w=dimension_size, output_c=1024, output_h=20, output_w=20).to(CFG.device)
-        # TODO: cnn weights
-        cnn_model.eval()
+        
         descriptors = cnn_model(reshaped_locations)
-
         synthetic_descriptors = mixvpr_agg(descriptors) # Shape: (b * num_points, out_rows * out_channels)
         # at this point, (800, 1, 16, 16) takes about 20gb vram. 
         synthetic_descriptors = synthetic_descriptors.view(b, num_points, 4 * 1024)

@@ -3,10 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 
 import config as CFG
-from modules import ImageEncoder, ProjectionHead, ImageProjectionHead
-
-import pdb
-
+from modules import ImageEncoder, ProjectionHead, ImageProjectionHead, ShallowConvNet
 
 class CPIPModel(nn.Module):
     def __init__(self):
@@ -24,6 +21,16 @@ class CPIPModel(nn.Module):
             dropout=CFG.projection_dropout,
             num_blocks=CFG.location_projection_blocks,
         )
+        self.cnn = ShallowConvNet(input_c = 1, 
+                                  input_h = int(CFG.contrastive_dimension ** 0.5),
+                                  input_w = int(CFG.contrastive_dimension ** 0.5),
+                                  output_c = 1024, output_h = 20, output_w = 20)
+        self.location_projection_2 = ProjectionHead(
+            embedding_dim=1024*20*20,
+            projection_dim=CFG.contrastive_dimension,
+            dropout=CFG.projection_dropout,
+            num_blocks=CFG.location_projection_blocks,
+        )
 
     def forward(self, batch):
         # Getting Image Features
@@ -31,11 +38,25 @@ class CPIPModel(nn.Module):
         image_features = self.image_encoder(batch["image"]) # shape: (batch_size, channels, encoder_output_height, encoder_output_width) = [8, 1024, 20, 20]
         batch_size, channels, encoder_output_height, encoder_output_width = image_features.shape
         image_features = image_features.view(batch_size, channels, encoder_output_height * encoder_output_width)
-        location_features = batch["location"] # shape:  (batch_size, 3) = [8, 3]
-
         # Getting Image and Location Embeddings (with same dimension)
         image_embeddings = self.image_projection(image_features) # shape: (batch_size, channels, contrastive_dimension) = [8, 1024, 256]
-        location_embeddings = self.location_projection(location_features) # shape: (batch_size, contrastive_dimension) = [8, 256]
+
+        # =========== Location branch ===========
+        location_info = batch["location"] # shape:  (batch_size, 3) = [8, 3]
+        location_embeddings = self.location_projection(location_info) # shape: (batch_size, contrastive_dimension) = [8, 256]
+
+        # reshape location embeddings to: (batch_size, sqrt(contrastive_dimension), sqrt(contrastive_dimension)) = [8, 16, 16]
+        location_embeddings = location_embeddings.view(batch_size, int(CFG.contrastive_dimension ** 0.5), int(CFG.contrastive_dimension ** 0.5))
+        # reshape to [8, 1, 16, 16]
+        location_embeddings = location_embeddings.unsqueeze(1)
+        location_descriptors = self.cnn(location_embeddings) #[8, 1024, 20, 20]
+        
+        # flatten the location_descriptors to [8, 1024*20*20]
+        location_descriptors = location_descriptors.view(batch_size, -1)
+
+        # use dot product (a matrxi) to scale back to (batch_size, contrastive_dimension) = [8, 256]
+        location_embeddings = self.location_projection_2(location_descriptors) 
+        # ==================================================
 
         # Normalize embeddings
         image_embeddings = F.normalize(image_embeddings, p=2, dim=-1)
