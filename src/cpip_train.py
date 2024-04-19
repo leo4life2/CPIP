@@ -70,15 +70,14 @@ def train(data_path):
         
         if epoch % CFG.vpr_validation_epochs == 0 and last_checkpoint_name: # VPR validation
             print("Performing VPR Validation")
-            (avg_dist_synthetic, min_dist_synthetic, max_dist_synthetic), (avg_dist_mixvpr_best, min_dist_mixvpr_best, max_dist_mixvpr_best) = main(data_path, cpip_checkpoint_path=last_checkpoint_name)
+            avg_dist_synthetic, avg_dist_mixvpr_best, avg_dist_synth_gt = main(data_path, cpip_checkpoint_path=last_checkpoint_name)
             
-            writer.add_scalar('VPR/avg_dist_synthetic', avg_dist_synthetic, epoch)
-            writer.add_scalar('VPR/min_dist_synthetic', min_dist_synthetic, epoch) 
-            writer.add_scalar('VPR/max_dist_synthetic', max_dist_synthetic, epoch)
-            writer.add_scalar('VPR/avg_dist_mixvpr_best', avg_dist_mixvpr_best, epoch)
-            writer.add_scalar('VPR/min_dist_mixvpr_best', min_dist_mixvpr_best, epoch)
-            writer.add_scalar('VPR/max_dist_mixvpr_best', max_dist_mixvpr_best, epoch)
+            writer.add_scalar('VPR/synthetic |P_q - P_a|/avg_dist', avg_dist_synthetic, epoch)
+            writer.add_scalar('VPR/synthetic_gt |P_q - P_a{hat}|/avg_dist', avg_dist_synth_gt, epoch)
+            writer.add_scalar('VPR/mixvpr_best |P_q - P_d|/avg_dist', avg_dist_mixvpr_best, epoch)
             
+            writer.add_scalar('VPR/mixvpr_vs_synthetic |P_q - P_d| - |P_q - P_a|', avg_dist_mixvpr_best - avg_dist_synthetic, epoch)
+            writer.add_scalar('VPR/mixvpr_vs_synthetic_gt |P_q - P_d| - |P_q - P_a{hat}|', avg_dist_mixvpr_best - avg_dist_synth_gt, epoch)
 
         train_loss, train_accuracy = train_epoch(model, train_loader, optimizer, lr_scheduler, step, writer, epoch)
         valid_loss, valid_accuracy = valid_epoch(model, valid_loader, writer, epoch)
