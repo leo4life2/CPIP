@@ -6,7 +6,6 @@ import math
 import numpy as np
 import pandas as pd
 import torch
-import pdb
 from CPIP import CPIPModel
 from tqdm import tqdm
 from cpip_utils import prepare_data, build_loaders, train_epoch, valid_epoch, calculate_metrics
@@ -162,41 +161,24 @@ def generate_grid(locations):
 def get_location_descriptors(mixvpr_agg, cpip_model, locations):
     location_encoder = cpip_model.location_projection
     cnn_model = cpip_model.cnn
-
-    combined_data_batches = []
-    batch_size = 25
-
     with torch.no_grad():
-        total_batches = math.ceil(locations.size(0) / batch_size)
-        
-        for i in range(total_batches):
-            start_idx = i * batch_size
-            end_idx = min((i + 1) * batch_size, locations.size(0))
-            
-            batch_locations = locations[start_idx:end_idx] # Shape: (batchsize, numpoints, 3) = [25, 480, 3]
-            encoded_locations = location_encoder(batch_locations)  # Encode all location vectors
-            # Shape: (batchsize, numpoints, CFG.contrastive_dimension) = [25, 480, 256]
-            # let num_points = ((2*CFG.grid_extent+1)**2 - 1) * CFG.num_rotation_steps,
-            # encoded_locations shape: (b, num_points, CFG.contrastive_dimension)
+        encoded_locations = location_encoder(locations)  # Encode all location vectors
+        # let num_points = ((2*CFG.grid_extent+1)**2 - 1) * CFG.num_rotation_steps,
+        # encoded_locations shape: (b, num_points, CFG.contrastive_dimension)
 
-            # current contrastive_dimension = 256
-            # Reshape to [1, sqrt(256), sqrt(256)] for each vector
-            b, num_points, _ = encoded_locations.shape
-            dimension_size = int(CFG.contrastive_dimension**0.5)
-            reshaped_locations = encoded_locations.view(b * num_points, 1, dimension_size, dimension_size)# [24000, 1, 16, 16] 
-            
-            descriptors = cnn_model(reshaped_locations) 
-            # descriptors: [12000, 1024, 20, 20]
-
-            synthetic_descriptors = mixvpr_agg(descriptors) # Shape: (b * num_points, out_rows * out_channels)
-            # at this point, (800, 1, 16, 16) takes about 20gb vram. 
-            synthetic_descriptors = synthetic_descriptors.view(b, num_points, 4 * 1024)
-            
-            # Combine locations and descriptors into a single tensor
-            combined_data_batch = torch.cat((batch_locations, synthetic_descriptors), dim=2)  # Shape: (batchsize, numpoints, 4099)
-            combined_data_batches.append(combined_data_batch)
+        # current contrastive_dimension = 256
+        # Reshape to [1, sqrt(256), sqrt(256)] for each vector
+        b, num_points, _ = encoded_locations.shape
+        dimension_size = int(CFG.contrastive_dimension**0.5)
+        reshaped_locations = encoded_locations.view(b * num_points, 1, dimension_size, dimension_size)
         
-        combined_data = torch.cat(combined_data_batches, dim=0)
+        descriptors = cnn_model(reshaped_locations)
+        synthetic_descriptors = mixvpr_agg(descriptors) # Shape: (b * num_points, out_rows * out_channels)
+        # at this point, (800, 1, 16, 16) takes about 20gb vram. 
+        synthetic_descriptors = synthetic_descriptors.view(b, num_points, 4 * 1024)
+
+        # Combine locations and descriptors into a single tensor
+        combined_data = torch.cat((locations, synthetic_descriptors), dim=2)  # Shape: (batchsize, numpoints, 4099)
         return combined_data
     
 

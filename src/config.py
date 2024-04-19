@@ -14,10 +14,8 @@ vpr_validation_epochs = 3 # run VPR pipeline after this number of epochs
 # Model Parameters
 # ==========================
 cpip_checkpoint_path = "/scratch/zl3493/dummy.pt"
-#cpip_checkpoint_path = ""
 image_encoder_model_name = "resnet50"
 mixvpr_checkpoint_path = "/scratch/zl3493/CPIP/resnet50_MixVPR_4096_channels(1024)_rows(4).ckpt"
-#mixvpr_checkpoint_path = "/scratch/jh7956/CPIP/resnet50_MixVPR_4096_channels(1024)_rows(4).ckpt"
 
 # Image Embedding Configuration
 # image_embedding = 1024 # for vit_large_patch14_dinov2

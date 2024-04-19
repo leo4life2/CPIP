@@ -3,10 +3,7 @@ from torch import nn
 import torch.nn.functional as F
 
 import config as CFG
-from modules import ImageEncoder, ProjectionHead, ImageProjectionHead, ShallowConvNet, DotProductModel
-
-import pdb
-
+from modules import ImageEncoder, ProjectionHead, ImageProjectionHead, ShallowConvNet
 
 class CPIPModel(nn.Module):
     def __init__(self):
@@ -28,7 +25,7 @@ class CPIPModel(nn.Module):
                                   input_h = int(CFG.contrastive_dimension ** 0.5),
                                   input_w = int(CFG.contrastive_dimension ** 0.5),
                                   output_c = 1024, output_h = 20, output_w = 20)
-        self.dotproduct = ProjectionHead(
+        self.location_projection_2 = ProjectionHead(
             embedding_dim=1024*20*20,
             projection_dim=CFG.contrastive_dimension,
             dropout=CFG.projection_dropout,
@@ -44,7 +41,7 @@ class CPIPModel(nn.Module):
         # Getting Image and Location Embeddings (with same dimension)
         image_embeddings = self.image_projection(image_features) # shape: (batch_size, channels, contrastive_dimension) = [8, 1024, 256]
 
-        # =========== Dealing with location branch ===========
+        # =========== Location branch ===========
         location_info = batch["location"] # shape:  (batch_size, 3) = [8, 3]
         location_embeddings = self.location_projection(location_info) # shape: (batch_size, contrastive_dimension) = [8, 256]
 
@@ -58,8 +55,7 @@ class CPIPModel(nn.Module):
         location_descriptors = location_descriptors.view(batch_size, -1)
 
         # use dot product (a matrxi) to scale back to (batch_size, contrastive_dimension) = [8, 256]
-        location_embeddings = self.dotproduct(location_descriptors) 
-        print(location_embeddings.shape)
+        location_embeddings = self.location_projection_2(location_descriptors) 
         # ==================================================
 
         # Normalize embeddings
