@@ -4,7 +4,7 @@ import torch
 # Training Setup
 # ==========================
 batch_size = 8
-vpr_batch_size = 10
+vpr_batch_size = 5
 num_workers = 0
 epochs = 150
 warmup_epochs = 5
@@ -14,7 +14,7 @@ vpr_validation_epochs = 3 # run VPR pipeline after this number of epochs
 # ==========================
 # Model Parameters
 # ==========================
-cpip_checkpoint_path = "/scratch/zl3493/CPIP/cpip_val0.3_20240417_190436.pt"
+cpip_checkpoint_path = "/scratch/zl3493/CPIP/cpip_val0.4_20240418_021433.pt"
 image_encoder_model_name = "resnet50"
 mixvpr_checkpoint_path = "/scratch/zl3493/CPIP/resnet50_MixVPR_4096_channels(1024)_rows(4).ckpt"
 
@@ -72,8 +72,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # VPR Configuration
 # ==========================
 vpr_threshold = 0.5
-top_k = 1
-# top_k = 5
+top_k = 5
 
 # Hyperparameters for grid generation
 grid_extent = 4     # number of points to generate in each direction (left, right, up, down)

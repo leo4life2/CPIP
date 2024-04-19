@@ -23,6 +23,9 @@ def calculate_average_closest_distance(database_df, sample_percentage):
     # Extract 2D coordinates, ignoring the last element of each array in the 'location' column
     coordinates = np.array([loc[:2] for loc in database_df['location']])
     
+    # Deduplicate coordinates to remove exact same rows
+    coordinates = np.unique(coordinates, axis=0)
+    
     # Determine the number of samples to take
     sample_size = int(len(coordinates) * sample_percentage)
     
@@ -173,21 +176,21 @@ def generate_grid(locations, grid_spacing):
     grid_points_y = y_center[:, None] + grid_y_flat * grid_spacing
     
     # Combine x and y coordinates for grid points
-    grid_points = torch.stack((grid_points_x, grid_points_y), dim=2)
+    grid_points_orig = torch.stack((grid_points_x, grid_points_y), dim=2)
     
     # Generate rotation steps
     theta_steps = torch.linspace(0, CFG.max_rotation_degrees, CFG.num_rotation_steps + 1, device=locations.device)[:-1]  # Exclude the last point to avoid duplication of 0 and 2*pi
-    theta_steps = theta_steps.expand(grid_points.size(0), grid_points.size(1), CFG.num_rotation_steps)
+    theta_steps = theta_steps.expand(grid_points_orig.size(0), grid_points_orig.size(1), CFG.num_rotation_steps)
     
     # Repeat grid points for each rotation step
-    grid_points = grid_points.unsqueeze(2).expand(-1, -1, CFG.num_rotation_steps, -1)
+    grid_points = grid_points_orig.unsqueeze(2).expand(-1, -1, CFG.num_rotation_steps, -1)
     
     # Combine grid points with theta steps
     grid_points_with_theta = torch.cat((grid_points, theta_steps.unsqueeze(-1)), dim=-1)
     
     # Reshape to final size (N, (2*CFG.grid_extent+1)**2 - 1 * CFG.num_rotation_steps, 3)
     grid_points_with_theta = grid_points_with_theta.reshape(locations.size(0), -1, 3)
-    return grid_points_with_theta.float()
+    return grid_points_with_theta.float(), grid_points_orig.float()
 
 def get_location_descriptors(mixvpr_agg, cpip_model, locations):
     location_encoder = cpip_model.location_projection
@@ -212,10 +215,21 @@ def get_location_descriptors(mixvpr_agg, cpip_model, locations):
         # at this point, (800, 1, 16, 16) takes about 20gb vram. 
         synthetic_descriptors = synthetic_descriptors.view(b, num_points, 4 * 1024)
         
-        # Combine locations and descriptors into a single tensor
-        combined_data = torch.cat((locations, synthetic_descriptors), dim=2)  # Shape: (batchsize, numpoints, 4099)
-        return combined_data
+        return synthetic_descriptors
     
+def get_closest_points(query_positions_2d, grid_points):
+    # Compute pairwise Euclidean distances
+    # Expand query_positions_2d to match the shape of grid_points for broadcasting
+    expanded_query_positions = query_positions_2d[:, np.newaxis, :]  # Shape [5, 1, 2]
+    # Calculate distances (using broadcasting)
+    distances = np.linalg.norm(grid_points - expanded_query_positions, axis=2)  # Shape [5, 80]
+    # Find the index of the minimum distance for each set
+    min_indices = np.argmin(distances, axis=1)  # Shape [5]
+    # Select the closest points using these indices
+    closest_points = grid_points[np.arange(grid_points.shape[0]), min_indices]  # Shape [5, 2]
+    
+    return closest_points
+
 
 def main(data_path, cpip_checkpoint_path=CFG.cpip_checkpoint_path):
     print("Starting the pipeline...")
@@ -236,9 +250,9 @@ def main(data_path, cpip_checkpoint_path=CFG.cpip_checkpoint_path):
     grid_spacing = grid_side_length / (2 * CFG.grid_extent + 1)
 
     # Initialize lists to collect results
-    all_synthetic_query_avg_positions = []
-    all_distances_synthetic = []
+    all_distances_synthetic_emb_best_match = []
     all_distances_mixvpr_best_match = []
+    all_distances_synthetic_real_best = []
 
     # Process in batches of 5 query vectors
     num_queries = len(query_df)
@@ -252,25 +266,18 @@ def main(data_path, cpip_checkpoint_path=CFG.cpip_checkpoint_path):
         # Get P_d for all {D_d}
         mixvpr_average_positions = get_average_position(db_df, matched_indices)
         # Get grid points for all P_d
-        grid_points = generate_grid(mixvpr_average_positions, grid_spacing)
+        grid_points_theta, grid_points_2d = generate_grid(mixvpr_average_positions, grid_spacing)
         
         # Generate synthetic descriptors for all locations
-        synthetic_data = get_location_descriptors(mixvpr_model.aggregator, cpip_model, grid_points)
-        # Shape: (batchsize, numpoints, 4096 + 3)
-        
-        # Extract descriptors and locations from synthetic_data
-        synthetic_descriptors = synthetic_data[:, :, 3:]  # Descriptors are after the first 3 columns which are locations
-        synthetic_locations = synthetic_data[:, :, :3]  # Locations are the first 3 columns
-
-        # Convert synthetic_descriptors to numpy array for similarity search
-        synthetic_descriptors_array = synthetic_descriptors.cpu().numpy()
+        synthetic_descriptors = get_location_descriptors(mixvpr_model.aggregator, cpip_model, grid_points_theta)
+        # Shape: (batchsize, numpoints, 4096)
         
         # Complete the similarity search for synthetic descriptors against query descriptors
         query_vectors_batch = np.stack(query_df['descriptors'].values[start_idx:end_idx])
-        synthetic_d_match_ixs = do_similarity_search(synthetic_descriptors_array, query_vectors_batch, k=CFG.top_k, batch=True)
+        synthetic_d_match_ixs = do_similarity_search(synthetic_descriptors.cpu().numpy(), query_vectors_batch, k=CFG.top_k, batch=True)
         
         # Get P_a for all {D_a}
-        synthetic_query_avg_positions = get_average_position(synthetic_locations.cpu().numpy(), synthetic_d_match_ixs)
+        synthetic_query_avg_positions = get_average_position(grid_points_theta.cpu().numpy(), synthetic_d_match_ixs)
         
         # Calculate distances
         query_positions_batch = query_df['location'].values[start_idx:end_idx]
@@ -279,30 +286,41 @@ def main(data_path, cpip_checkpoint_path=CFG.cpip_checkpoint_path):
         query_positions_2d = query_positions_batch[:, :2]
         mixvpr_avg_positions_2d = mixvpr_average_positions[:, :2]
         synthetic_avg_positions_2d = synthetic_query_avg_positions[:, :2]
-        distance_synthetic = np.linalg.norm(query_positions_2d - synthetic_avg_positions_2d, axis=1)
-        distance_mixvpr_best_match = np.linalg.norm(query_positions_2d - mixvpr_avg_positions_2d, axis=1)
+        synthetic_top_positions_2d = synthetic_avg_positions_2d[:1, :]
+        # Real 2d best synthetic loc matches from grid points
+        synth_loc_real_closest_points = get_closest_points(query_positions_2d, grid_points_2d.cpu().numpy()) # P_hat{a}
+        
+        distance_synthetic_emb_best_match = np.linalg.norm(query_positions_2d - synthetic_avg_positions_2d, axis=1) # P_q - P_d
+        distance_mixvpr_best_match = np.linalg.norm(query_positions_2d - mixvpr_avg_positions_2d, axis=1) # P_q - P_a
+        distance_synthetic_real_best_match = np.linalg.norm(query_positions_2d - synth_loc_real_closest_points, axis=1) # P_q - P_hat{a}
         
         # Collect results
-        all_synthetic_query_avg_positions.append(synthetic_query_avg_positions)
-        all_distances_synthetic.extend(distance_synthetic)
+        all_distances_synthetic_emb_best_match.extend(distance_synthetic_emb_best_match)
         all_distances_mixvpr_best_match.extend(distance_mixvpr_best_match)
+        all_distances_synthetic_real_best.extend(distance_synthetic_real_best_match)
 
     # Aggregate results
-    avg_dist_synthetic = np.mean(all_distances_synthetic)
-    min_dist_synthetic = np.min(all_distances_synthetic)
-    max_dist_synthetic = np.max(all_distances_synthetic)
+    avg_dist_synthetic_emb_best_match = np.mean(all_distances_synthetic_emb_best_match)
+    min_dist_synthetic_emb_best_match = np.min(all_distances_synthetic_emb_best_match)
+    max_dist_synthetic_emb_best_match = np.max(all_distances_synthetic_emb_best_match)
     avg_dist_mixvpr_best = np.mean(all_distances_mixvpr_best_match)
     min_dist_mixvpr_best = np.min(all_distances_mixvpr_best_match)
     max_dist_mixvpr_best = np.max(all_distances_mixvpr_best_match)
+    avg_dist_synthetic_real_best = np.mean(all_distances_synthetic_real_best)
+    min_dist_synthetic_real_best = np.min(all_distances_synthetic_real_best)
+    max_dist_synthetic_real_best = np.max(all_distances_synthetic_real_best)
 
-    print("Average distance to synthetic descriptors:", avg_dist_synthetic)
-    print("Minimum distance to synthetic descriptors:", min_dist_synthetic)
-    print("Maximum distance to synthetic descriptors:", max_dist_synthetic)
+    print("Average distance to synthetic descriptors w/ embedding similarity:", avg_dist_synthetic_emb_best_match)
+    print("Minimum distance to synthetic descriptors w/ embedding similarity:", min_dist_synthetic_emb_best_match)
+    print("Maximum distance to synthetic descriptors w/ embedding similarity:", max_dist_synthetic_emb_best_match)
     print("Average distance to MixVPR's best match:", avg_dist_mixvpr_best)
     print("Minimum distance to MixVPR's best match:", min_dist_mixvpr_best)
     print("Maximum distance to MixVPR's best match:", max_dist_mixvpr_best)
+    print("Average distance to synthetic descriptors w/ gt location:", avg_dist_synthetic_real_best)
+    print("Minimum distance to synthetic descriptors w/ gt location:", min_dist_synthetic_real_best)
+    print("Maximum distance to synthetic descriptors w/ gt location:", max_dist_synthetic_real_best)
 
-    return (avg_dist_synthetic, min_dist_synthetic, max_dist_synthetic), (avg_dist_mixvpr_best, min_dist_mixvpr_best, max_dist_mixvpr_best)
+    return avg_dist_synthetic_emb_best_match, avg_dist_mixvpr_best, avg_dist_synthetic_real_best
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Run the VPR pipeline.")
